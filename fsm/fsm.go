@@ -3,34 +3,33 @@ package fsm
 import "../io"
 import "fmt"
 
-func Fsm(drv_buttons chan io.ButtonEvent){
+func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int){
+    numFloors := 4
+    //var orders[numFloors*3] bool// [opp, X, inni, opp, ned, inni...., X, ned, inni]
 
-    //numFloors := 4
-//15657
-    //io.Init("localhost:15652", numFloors)
-    
-    //var d elevio.MotorDirection = elevio.MD_Up
-    //elevio.SetMotorDirection(d)
-    
-
-    
+    var d io.MotorDirection = io.MD_Up
     
     for {
         select {
-        
-        case a := <- drv_buttons:
-            fmt.Printf("%+v\n", a)
-            io.SetButtonLamp(a.Button, a.Floor, true)
-        /*  
-        case a := <- drv_floors:
-            fmt.Printf("%+v\n", a)
-            if a == numFloors-1 {
-                d = elevio.MD_Down
-            } else if a == 0 {
-                d = elevio.MD_Up
-            }
-            elevio.SetMotorDirection(d)
-            
+            case a := <- drv_buttons:
+                fmt.Printf("%+v\n", a)
+                io.SetButtonLamp(a.Button, a.Floor, true)
+                //legg til knappetrykk i order list
+
+                //if (standing still):
+                    // take the first order in the list
+              
+            case a := <- drv_floors:
+                // if (order in floor):
+                    // stop and remove order
+                fmt.Printf("%+v\n", a)
+                if a == numFloors-1 {
+                    d = io.MD_Down
+                } else if a == 0 {
+                    d = io.MD_Up
+                }
+                io.SetMotorDirection(d)
+        /* 
            
         case a := <- drv_obstr:
             fmt.Printf("%+v\n", a)

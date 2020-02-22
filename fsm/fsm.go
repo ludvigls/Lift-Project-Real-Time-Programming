@@ -1,27 +1,84 @@
 package fsm
 
 import "../io"
-import "fmt"
+
+import (
+    "fmt"
+    "time"
+)
+
+const numFloors = 4
+var orders[numFloors*3] bool // [. . .   . . .   . . .   . . . ] (3 x 1.etj, 3 x 2.etj ....)
+
+func RemoveOrdersInFloor(floor int) {
+    for i:=0; i < 3; i++ { // up, down, cab
+        orders[floor*3 + i] = false
+        io.SetButtonLamp(io.ButtonType(i), floor, false)
+    }
+}
 
 func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int){
-    numFloors := 4
-    //var orders[numFloors*3] bool// [opp, X, inni, opp, ned, inni...., X, ned, inni]
+    Door_timer := time.NewTimer(120*time.Second) //init door timer
 
+    //INIT PHASE
     var d io.MotorDirection = io.MD_Up
-    
+    io.SetMotorDirection(d)
+    curr_floor :=<-drv_floors //wait until reaches floor
+    d=io.MD_Stop
+    io.SetMotorDirection(d)
+
     for {
         select {
+            case <- Door_timer.C : // door is closing
+                io.SetDoorOpenLamp(false)
+                // se om det finnes orders
+                // gå i riktig retning
+
+                /*
+                if (a.Floor>curr_floor) {
+                    d=io.MD_Up
+                    io.SetMotorDirection(d)
+                } else if (a.Floor<curr_floor) {
+                    d=io.MD_Down
+                    io.SetMotorDirection(d)
+                }
+                */
+            
             case a := <- drv_buttons:
                 fmt.Printf("%+v\n", a)
                 io.SetButtonLamp(a.Button, a.Floor, true)
-                //legg til knappetrykk i order list
+                
+                orders[(a.Floor)*3 + int(a.Button)] = true
+                fmt.Println(orders)
 
-                //if (standing still):
-                    // take the first order in the list
-              
+                if (d==io.MD_Stop){ // Idle state
+                    if (a.Floor==curr_floor) {
+                        Door_timer = time.NewTimer(3*time.Second)
+                        RemoveOrdersInFloor(a.Floor)
+                    } else if (a.Floor>curr_floor) {
+                        d=io.MD_Up
+                        io.SetMotorDirection(d)
+                    } else if (a.Floor<curr_floor) {
+                        d=io.MD_Down
+                        io.SetMotorDirection(d)
+                    }
+                }
+                
             case a := <- drv_floors:
-                // if (order in floor):
-                    // stop and remove order
+                curr_floor=a
+                for i:=0; i < 3; i++ { // i : up, down, cab
+                    if (orders[a*3 + i]) { // if order in floor 
+                        // TODO, IF ALSO IN RIGHT DIRECTION
+                        d=io.MD_Stop
+                        io.SetMotorDirection(d)
+                        RemoveOrdersInFloor(a)
+                        
+                        //Open door evt, kjøre til neste order
+                        io.SetDoorOpenLamp(true)
+                        Door_timer = time.NewTimer(3*time.Second) //nsek timer
+                        }
+                    }
+                /*
                 fmt.Printf("%+v\n", a)
                 if a == numFloors-1 {
                     d = io.MD_Down
@@ -29,24 +86,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int){
                     d = io.MD_Up
                 }
                 io.SetMotorDirection(d)
-        /* 
-           
-        case a := <- drv_obstr:
-            fmt.Printf("%+v\n", a)
-            if a {
-                elevio.SetMotorDirection(elevio.MD_Stop)
-            } else {
-                elevio.SetMotorDirection(d)
-            }
-            
-        case a := <- drv_stop:
-            fmt.Printf("%+v\n", a)
-            for f := 0; f < numFloors; f++ {
-                for b := elevio.ButtonType(0); b < 3; b++ {
-                    elevio.SetButtonLamp(b, f, false)
-                }
-            }
-            */
+                */
         }
         
     }    

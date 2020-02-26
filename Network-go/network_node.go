@@ -15,12 +15,13 @@ import (
 //  will be received as zero-values.
 type HelloMsg struct {
 	Message string
+	Id      string
 	Iter    int
 }
 
 
-func counter(countCh chan int) {
-	count := 0
+func counter(countCh chan int, start_from int) {
+	count := start_from
 	for {
 		count++
 		countCh <- count
@@ -70,7 +71,7 @@ func main() {
 	countCh := make(chan int)
 
 	if id == "1" {
-		go counter(countCh)
+		go counter(countCh, 0)
 	}
 
 	// ... and start the transmitter/receiver pair on some port
@@ -82,18 +83,16 @@ func main() {
 	go bcast.Receiver(16569, helloRx)
 
 
-	//Send I'm alive functionality every sec
-	
-	if id == "1" {
-		go func() {
-			helloMsg := HelloMsg{"I'm Alive from " + id, 0}
-			for {
-				helloMsg.Iter = count_glob
-				helloTx <- helloMsg
-				time.Sleep(1 * time.Second)
-			}
-		}()
-	}
+	//Everyone sends I'm alive functionality every sec
+	go func() {
+		helloMsg := HelloMsg{"I'm Alive", id, 0}
+		for {
+			helloMsg.Iter = count_glob
+			helloTx <- helloMsg
+			time.Sleep(500 * time.Millisecond)
+		}
+	}()
+
 
 	fmt.Println("Started with id: ", id)
 	for {
@@ -103,12 +102,28 @@ func main() {
 			fmt.Printf("  Peers:    %q\n", p.Peers)
 			fmt.Printf("  New:      %q\n", p.New)
 			fmt.Printf("  Lost:     %q\n", p.Lost)
-			if (len(p.Lost) > 0) {
-			    fmt.Printf("Aahhh lost lift with id: %d", p.Lost[0])
+
+			if (len(p.Lost) > 0) { //someone lost
+			    if p.Lost[0] == "1" { // Primary lost
+			    	//Become primary
+			    	fmt.Printf("I SHOULD BECOME PRIMARY and count from %d \n", count_glob)
+			    	id = "1"
+
+			    	//TODO, This is shit and should not be like this
+			    	go counter(countCh, count_glob)
+			    	// AT THIS POINT THIS NODE STOPS TRANSMITTING ITS IM ALIVE MESSAGES
+
+
+			    } else if p.Lost[0] == "2" { // Lost backup
+			    	//Create a new backup
+			    	fmt.Printf("I SHOULD CREATE NEW BACKUP \n")
+			    }
 			}
 		case a := <-helloRx: //msg on channel helloRx
-			if id != "1" { // If secondary
-				fmt.Printf("Received: %#v\n", a)
+			fmt.Printf("Recieving.... %s \n", a.Id)
+			if id == "2" && a.Id == "1" { // If I'm secondary and msg from primary
+				fmt.Printf("Received from primary: %#v\n", a)
+				count_glob = a.Iter // backup the count
 			}
 		
 		case a := <- countCh: // a LOCAL message only heard on local computer

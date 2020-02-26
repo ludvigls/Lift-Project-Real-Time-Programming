@@ -20,7 +20,7 @@ var curr_floor int =1
 
 
 
-func RemoveOrdersInFloor(floor int) {
+func fsm_remove_orders_in_floor(floor int) {
     for i:=0; i < 3; i++ { // up, down, cab
         orders[floor*3 + i] = false
         io.SetButtonLamp(io.ButtonType(i), floor, false)
@@ -32,6 +32,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int){
     //var dir_i io.ButtonType
 
     //INIT PHASE
+    for c := 0; c < numFloors; c++ {fsm_remove_orders_in_floor(c)}
     var dir io.MotorDirection = io.MD_Up
     curr_dir = dir
     io.SetMotorDirection(dir)
@@ -134,11 +135,12 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int){
                 */
         }
         if ( state == IDLE ) {
+            fmt.Println("IDLE")
         	io.SetMotorDirection(io.MD_Stop)
             for c := 0; c < numFloors; c++ {
                 for x:=0; x < 3; x++{
                     if orders[c*3 + x] == true {
-                    	fmt.Println("go to state RUNNING")
+                    	//fmt.Println("go to state RUNNING")
                         state = running
                     }
                 }
@@ -148,13 +150,26 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int){
         	fmt.Println("RUNNING")
         	fsm_set_dir()
             io.SetMotorDirection(curr_dir)
+            stopping = fsm_stop_in_floor(curr_floor, int( curr_dir ))
+            if (stopping == 1) {
+                Door_timer = time.NewTimer(3*time.Second)
+                state = serving_floor
+            }
             
             
         }
         if ( state == serving_floor ) {
-        	RemoveOrdersInFloor(curr_floor)
+            fmt.Println("SERVING FLOOR")
+        	//fsm_serve_floor()
+            fsm_remove_orders_in_floor(curr_floor)
         	dir = io.MD_Stop
         	io.SetMotorDirection(dir)
+            io.SetDoorOpenLamp(true)
+            io.SetButtonLamp(io.BT_HallUp, curr_floor, false)
+            io.SetButtonLamp(io.BT_HallDown, curr_floor, false)
+            io.SetButtonLamp(io.BT_Cab, curr_floor, false)
+            
+            
         	//fsm_serve_floor()
         }
         
@@ -162,8 +177,8 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int){
 }
 
 func fsm_set_dir() {
-	fmt.Println("dir before")
-	fmt.Println("%+v\n", curr_dir)
+	/*fmt.Println("dir before")
+	fmt.Println("%+v\n", curr_dir)*/
     continue_in_dir := 0
     if (curr_dir == io.MD_Up) {
         for c:= curr_floor+1; c < numFloors; c++ {
@@ -190,10 +205,10 @@ func fsm_set_dir() {
             }
         }
     }
-    if continue_in_dir == 0 { curr_dir = (-1) * curr_dir 
-    fmt.Println("change dir")}
+    if continue_in_dir == 0 { curr_dir = (-1) * curr_dir }
+    /*fmt.Println("change dir")}
     fmt.Println("dir after")
-    fmt.Println("%+v\n", curr_dir)
+    fmt.Println("%+v\n", curr_dir)*/
 }
 
 func fsm_serve_floor() {
@@ -205,9 +220,9 @@ func fsm_serve_floor() {
 func fsm_stop_in_floor(curr_floor int, curr_dir int) int {
 	ans := 0
 	if (orders[curr_floor * 3 + 2] == true) {ans = 1}
-	if (curr_dir == 1) {
+	if ((curr_dir == 1)||(curr_floor == 0)) {
 		if (orders[curr_floor * 3] == true) {ans = 1}
-	}else if (curr_dir == -1) {
+	}else if ((curr_dir == -1)||(curr_floor == numFloors)) {
 		if (orders[curr_floor * 3 + 1] == true) {ans = 1}
 	}
     if (ans == 1){fmt.Println("STOPP")}

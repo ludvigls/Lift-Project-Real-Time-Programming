@@ -18,16 +18,32 @@ type HelloMsg struct {
 	Iter    int
 }
 
+
+func counter(countCh chan int) {
+	count := 0
+	for {
+		count++
+		countCh <- count
+		time.Sleep(1* time.Second)
+	}
+}
+
+
 func main() {
 	// Our id can be anything. Here we pass it on the command line, using
 	//  `go run main.go -id=our_id`
+	
 	var id string
+	var count_glob int
+
 	flag.StringVar(&id, "id", "", "id of this peer")
 	flag.Parse()
 
 	// ... or alternatively, we can use the local IP address.
 	// (But since we can run multiple programs on the same PC, we also append the
 	//  process ID)
+	
+	//Useless for now
 	if id == "" {
 		localIP, err := localip.LocalIP()
 		if err != nil {
@@ -37,18 +53,25 @@ func main() {
 		id = fmt.Sprintf("peer-%s-%d", localIP, os.Getpid())
 	}
 
+
 	// We make a channel for receiving updates on the id's of the peers that are
 	//  alive on the network
 	peerUpdateCh := make(chan peers.PeerUpdate)
 	// We can disable/enable the transmitter after it has been started.
 	// This could be used to signal that we are somehow "unavailable".
 	peerTxEnable := make(chan bool)
+	
 	go peers.Transmitter(15647, id, peerTxEnable)
 	go peers.Receiver(15647, peerUpdateCh)
 
 	// We make channels for sending and receiving our custom data types
 	helloTx := make(chan HelloMsg)
 	helloRx := make(chan HelloMsg)
+	countCh := make(chan int)
+
+	if id == "1" {
+		go counter(countCh)
+	}
 
 	// ... and start the transmitter/receiver pair on some port
 	// These functions can take any number of channels! It is also possible to
@@ -58,18 +81,21 @@ func main() {
 	go bcast.Transmitter(16569, helloTx)
 	go bcast.Receiver(16569, helloRx)
 
-	// The example message. We just send one of these every second.
-	
-	go func() { // This is a go routine, publishing stuff
-		helloMsg := HelloMsg{"Hello from " + id, 0}
-		for {
-			helloMsg.Iter++
-			helloTx <- helloMsg
-			time.Sleep(1 * time.Second)
-		}
-	}()
 
-	fmt.Println("Started")
+	//Send I'm alive functionality every sec
+	
+	if id == "1" {
+		go func() {
+			helloMsg := HelloMsg{"I'm Alive from " + id, 0}
+			for {
+				helloMsg.Iter = count_glob
+				helloTx <- helloMsg
+				time.Sleep(1 * time.Second)
+			}
+		}()
+	}
+
+	fmt.Println("Started with id: ", id)
 	for {
 		select {
 		case p := <-peerUpdateCh:
@@ -77,9 +103,17 @@ func main() {
 			fmt.Printf("  Peers:    %q\n", p.Peers)
 			fmt.Printf("  New:      %q\n", p.New)
 			fmt.Printf("  Lost:     %q\n", p.Lost)
-
-		//case a := <-helloRx: //msg on channel helloRx
-		//	fmt.Printf("Received: %#v\n", a)
+			if (len(p.Lost) > 0) {
+			    fmt.Printf("Aahhh lost lift with id: %d", p.Lost[0])
+			}
+		case a := <-helloRx: //msg on channel helloRx
+			if id != "1" { // If secondary
+				fmt.Printf("Received: %#v\n", a)
+			}
+		
+		case a := <- countCh: // a LOCAL message only heard on local computer
+			count_glob = a
+			fmt.Printf("primary counting... %d \n", count_glob)
 		}
 	}
 }

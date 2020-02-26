@@ -22,6 +22,7 @@ func main() {
 	// Our id can be anything. Here we pass it on the command line, using
 	//  `go run main.go -id=our_id`
 	var id string
+	var last_count int
 	flag.StringVar(&id, "id", "", "id of this peer")
 	flag.Parse()
 
@@ -71,7 +72,7 @@ func main() {
 	}()
 	*/
 
-	fmt.Println("Started")
+	fmt.Println("Started, im backup")
 	for {
 		select {
 		case p := <-peerUpdateCh:
@@ -80,8 +81,15 @@ func main() {
 			fmt.Printf("  New:      %q\n", p.New)
 			fmt.Printf("  Lost:     %q\n", p.Lost)
 
+			if (len(p.Lost) > 0) {
+			    fmt.Printf("Aahhh lost master :( \n will count from %d", last_count)
+			}
+
 		case a := <-helloRx: //msg on channel helloRx
 			fmt.Printf("Received: %#v\n", a)
+			last_count = a.Iter
+			fmt.Printf("Last count recieved: %#v\n", last_count)
+
 		}
 	}
 }

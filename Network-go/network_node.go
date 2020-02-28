@@ -13,14 +13,14 @@ import (
 // We define some custom struct to send over the network.
 // Note that all members we want to transmit must be public. Any private members
 //  will be received as zero-values.
-type HelloMsg struct {
-	Message string
+type AliveMsg struct {
+	Message string 
 	Id      string
-	Iter    int
+	Iter    int // Will change to state for actual project
 }
 
 
-func counter(countCh chan<- int, start_from int) {
+func counter(countCh chan<- int, start_from int) { // Will be fsm for actual project
 	count := start_from
 	for {
 		count++
@@ -65,8 +65,8 @@ func main() {
 	go peers.Receiver(15647, peerUpdateCh)
 
 	// We make channels for sending and receiving our custom data types
-	helloTx := make(chan HelloMsg)
-	helloRx := make(chan HelloMsg)
+	aliveTx := make(chan AliveMsg)
+	aliveRx := make(chan AliveMsg)
 
 	countCh := make(chan int)
 	idCh := make(chan string)
@@ -80,21 +80,21 @@ func main() {
 	//  start multiple transmitters/receivers on the same port.
 	
 	// A transmitter and receiver transmitting and recieving to the same port
-	go bcast.Transmitter(16569, helloTx)
-	go bcast.Receiver(16569, helloRx)
+	go bcast.Transmitter(16569, aliveTx)
+	go bcast.Receiver(16569, aliveRx)
 
 
 	//Everyone sends I'm alive functionality every sec	
 
 	go func(idCh chan string) {
-		helloMsg := HelloMsg{"I'm Alive", id, 0}
+		AliveMsg := AliveMsg{"I'm Alive", id, 0}
 		for {
 			select { 
 				case a := <- idCh:
-					helloMsg.Id = a
+					AliveMsg.Id = a
 				default:
-					helloMsg.Iter = count_glob
-					helloTx <- helloMsg
+					AliveMsg.Iter = count_glob
+					aliveTx <- AliveMsg
 					time.Sleep(500 * time.Millisecond)
 				}
 		}
@@ -119,9 +119,15 @@ func main() {
 			    	// TODO, only sent once, not correct way (works with no package loss)
 			    	idCh <- id
 
+			    	// Update about role change, 2 becomes 1. Aka 2 lost, 1 new.
+			    	//p.New = "1"
+			    	//p.Lost[0] = "2"
+			    	//p.Peers[0] = "1"
+	
 			    	//TODO, This is shit and should not be like this
 			    	go counter(countCh, count_glob)
 
+			    	//peerUpdateCh <- peers.PeerUpdate{ p.Peers, p.New, p.Lost } // TODO, does not work with several lifts
 
 			    } else if p.Lost[0] == "2" && id == "1" { // Primary lost heartbeat from secondary
 			    	fmt.Printf("I SHOULD CREATE NEW BACKUP \n")
@@ -129,7 +135,7 @@ func main() {
 			    	fmt.Printf("We lost someone that isnt backup, should be handled... \n")
 			    }
 			}
-		case a := <-helloRx: //msg on channel helloRx
+		case a := <-aliveRx: //msg on channel aliveRx
 			fmt.Printf("Recieving from: %s \n", a.Id)
 			if id == "2" && a.Id == "1" { // If I'm secondary and msg from primary
 				fmt.Printf("Received from primary: %#v\n", a)

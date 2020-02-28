@@ -20,7 +20,7 @@ type HelloMsg struct {
 }
 
 
-func counter(countCh chan int, start_from int) {
+func counter(countCh chan<- int, start_from int) {
 	count := start_from
 	for {
 		count++
@@ -28,7 +28,6 @@ func counter(countCh chan int, start_from int) {
 		time.Sleep(1* time.Second)
 	}
 }
-
 
 func main() {
 	// Our id can be anything. Here we pass it on the command line, using
@@ -68,7 +67,9 @@ func main() {
 	// We make channels for sending and receiving our custom data types
 	helloTx := make(chan HelloMsg)
 	helloRx := make(chan HelloMsg)
+
 	countCh := make(chan int)
+	idCh := make(chan string)
 
 	if id == "1" {
 		go counter(countCh, 0)
@@ -83,15 +84,22 @@ func main() {
 	go bcast.Receiver(16569, helloRx)
 
 
-	//Everyone sends I'm alive functionality every sec
-	go func() {
+	//Everyone sends I'm alive functionality every sec	
+
+	go func(idCh chan string) {
 		helloMsg := HelloMsg{"I'm Alive", id, 0}
 		for {
-			helloMsg.Iter = count_glob
-			helloTx <- helloMsg
-			time.Sleep(500 * time.Millisecond)
+			select { 
+				case a := <- idCh:
+					helloMsg.Id = a
+				default:
+					helloMsg.Iter = count_glob
+					helloTx <- helloMsg
+					time.Sleep(500 * time.Millisecond)
+				}
 		}
-	}()
+	}(idCh)
+	
 
 
 	fmt.Println("Started with id: ", id)
@@ -104,23 +112,25 @@ func main() {
 			fmt.Printf("  Lost:     %q\n", p.Lost)
 
 			if (len(p.Lost) > 0) { //someone lost
-			    if p.Lost[0] == "1" { // Primary lost
-			    	//Become primary
+			    if p.Lost[0] == "1" && id == "2" { // Secondary lost heartbeat from primary
 			    	fmt.Printf("I SHOULD BECOME PRIMARY and count from %d \n", count_glob)
 			    	id = "1"
 
+			    	// TODO, only sent once, not correct way (works with no package loss)
+			    	idCh <- id
+
 			    	//TODO, This is shit and should not be like this
 			    	go counter(countCh, count_glob)
-			    	// AT THIS POINT THIS NODE STOPS TRANSMITTING ITS IM ALIVE MESSAGES
 
 
-			    } else if p.Lost[0] == "2" { // Lost backup
-			    	//Create a new backup
+			    } else if p.Lost[0] == "2" && id == "1" { // Primary lost heartbeat from secondary
 			    	fmt.Printf("I SHOULD CREATE NEW BACKUP \n")
+			    } else {
+			    	fmt.Printf("We lost someone that isnt backup, should be handled... \n")
 			    }
 			}
 		case a := <-helloRx: //msg on channel helloRx
-			fmt.Printf("Recieving.... %s \n", a.Id)
+			fmt.Printf("Recieving from: %s \n", a.Id)
 			if id == "2" && a.Id == "1" { // If I'm secondary and msg from primary
 				fmt.Printf("Received from primary: %#v\n", a)
 				count_glob = a.Iter // backup the count
@@ -128,7 +138,7 @@ func main() {
 		
 		case a := <- countCh: // a LOCAL message only heard on local computer
 			count_glob = a
-			fmt.Printf("primary counting... %d \n", count_glob)
+			fmt.Printf("Primary counting... %d \n", count_glob)
 		}
 	}
 }

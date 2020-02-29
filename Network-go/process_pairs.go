@@ -9,7 +9,6 @@ import (
 	"os"
 	"time"
 	"os/exec"
-	"strconv"
 )
 
 // We define some custom struct to send over the network.
@@ -38,20 +37,15 @@ func counter(countCh chan<- int, start_from int) { // Will be fsm for actual pro
 
 func main() {	//  `go run main.go -id=our_id`
 	var id string
-
 	var count_glob int
 
 	flag.StringVar(&id, "id", "", "id of this peer")
 	flag.Parse()
 
-	id_int, _ := strconv.Atoi(id)
-	fmt.Println("hei %d \n", id_int)
-
-
 	// ... or alternatively, we can use the local IP address.
 	// (But since we can run multiple programs on the same PC, we also append the
 	//  process ID)
-
+	
 	if id == "" { //Useless for now
 		localIP, err := localip.LocalIP()
 		if err != nil {
@@ -79,7 +73,7 @@ func main() {	//  `go run main.go -id=our_id`
 	idCh := make(chan string)
 
 	if id == "1" {
-		//spawnBackup()
+		spawnBackup()
 		go counter(countCh, 0)
 	}
 	// ... and start the transmitter/receiver pair on some port
@@ -115,35 +109,25 @@ func main() {	//  `go run main.go -id=our_id`
 			fmt.Printf("  Lost:     %q\n", p.Lost)
 
 			if (len(p.Lost) > 0) { //someone lost
-			    for i:=0; i < len(p.Lost); i++ {
-			    	lost_id, _ := strconv.Atoi(p.Lost[i])
-			    	if (lost_id < id_int) {
-			    		fmt.Println("lost someone smaller than me RAGEE!!")
-			    	} else {
-			    		fmt.Println("Someone bigger, dont care")
-			    	}
-			    }
-
 			    if p.Lost[0] == "1" && id == "2" { // Secondary lost heartbeat from primary
 			    	fmt.Printf("Lost primary \n")
 			    	fmt.Printf("Will become primary and count from:  %d \n", count_glob)
 			    	id = "1"
-			    	id_int, _= strconv.Atoi(id)
 
 			    	// TODO, only sent once, not correct way (works with no package loss)
 			    	idCh <- id
 			    	peerTxEnable <- false
 			    	go peers.Transmitter(15647, id, peerTxEnable)
 
-			    	//TODO, This is might be shit and should not be like this
+			    	//TODO, This is shit and should not be like this
 			    	go counter(countCh, count_glob)
 
 			    } else if p.Lost[0] == "2" && id == "1" { // Primary lost heartbeat from secondary
 			    	fmt.Printf("Lost backup \n")
-			    	//spawnBackup()
-			    } //else {
-			    	//fmt.Printf("Lost someone non backup/primary, should be handled... \n")
-			    //}
+			    	spawnBackup()
+			    } else {
+			    	fmt.Printf("Lost someone non backup/primary, should be handled... \n")
+			    }
 			}
 		case a := <-aliveRx: //msg on channel aliveRx
 			//fmt.Printf("Recieving from: %s \n", a.Id)

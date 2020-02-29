@@ -64,11 +64,11 @@ func stopForOrder(curr_floor int, curr_dir io.MotorDirection) bool {
 			for f := 0; f < curr_floor; f++ {
 				fmt.Printf("floor= %d \n", f)
 				if orders[f*3+int(io.BT_HallDown)] || orders[f*3+int(io.BT_Cab)] { //OR CAB
-					fmt.Printf("found the below order \n")
+
 					return false
 				}
 			}
-			fmt.Printf("fucked up \n")
+
 			return true
 		}
 	}
@@ -93,7 +93,29 @@ func takeAnyOrder(curr_floor int) io.MotorDirection {
 	return io.MD_Stop
 }
 
-//func whereToGo(curr_floor int, curr_dir io.MotorDirection) {
+func whereToGo(curr_floor int, curr_dir io.MotorDirection) io.MotorDirection {
+	if orderInFloor(curr_floor) { // take orders in curr floor if order goes up / cab order
+		return io.MD_Stop
+	}
+	if curr_dir == io.MD_Up {
+
+		// if order in curr floor wants to go down
+		for f := curr_floor + 1; f < numFloors; f++ { //DONT take the order, if there are other orders in up dir above you / cab orders above
+			if orders[f*3+int(io.BT_HallUp)] || orders[f*3+int(io.BT_Cab)] {
+				return io.MD_Up
+			}
+		}
+		//Equivalent logic but for down direction
+	} else if curr_dir == io.MD_Down {
+
+		for f := 0; f < curr_floor; f++ {
+			if orders[f*3+int(io.BT_HallUp)] || orders[f*3+int(io.BT_Cab)] {
+				return io.MD_Down
+			}
+		}
+	}
+	return takeAnyOrder(curr_floor)
+}
 
 //}
 
@@ -143,7 +165,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int) {
 				curr_state = 0 // go to door open state
 			} else if hasOrder() {
 				curr_state = 1 //running
-				d = takeAnyOrder(curr_floor)
+				d = whereToGo(curr_floor, curr_dir)
 				io.SetMotorDirection(d)
 				curr_dir = d
 			} else {
@@ -251,7 +273,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int) {
 			fmt.Printf("idle \n")
 			//check for new orders!
 			//d = whereToGo(curr_dir, curr_floor)
-			d = takeAnyOrder(curr_floor)
+			d = whereToGo(curr_floor, curr_dir)
 			io.SetMotorDirection(d)
 			if d == io.MD_Stop && orderInFloor(curr_floor) {
 				Door_timer = time.NewTimer(3 * time.Second)

@@ -18,7 +18,14 @@ const (
 )
 
 var orders [numFloors * 3]bool // [. . .   . . .   . . .   . . . ] (3 x 1.etj, 3 x 2.etj ....)
-
+func hasOrder() bool {
+	for i := 0; i < len(orders); i++ {
+		if orders[i] {
+			return true
+		}
+	}
+	return false
+}
 func removeOrdersInFloor(floor int) { // Remove orders + turn off lamps
 	for i := 0; i < 3; i++ { // up, down, cab
 		orders[floor*3+i] = false
@@ -41,8 +48,8 @@ func stopForOrder(curr_floor int, curr_dir io.MotorDirection) bool {
 			return true
 		}
 		if orders[curr_floor*3+int(io.BT_HallDown)] { // if order in curr floor wants to go down
-			for i := curr_floor + 1; i < numFloors; i++ { //DONT take the order, if there are other orders in up dir above you / cab orders above
-				if orders[i*3+int(io.BT_HallUp)] || orders[i*3+int(io.BT_Cab)] {
+			for f := curr_floor + 1; f < numFloors; f++ { //DONT take the order, if there are other orders in up dir above you / cab orders above
+				if orders[f*3+int(io.BT_HallUp)] || orders[f*3+int(io.BT_Cab)] {
 					return false
 				}
 			}
@@ -54,11 +61,14 @@ func stopForOrder(curr_floor int, curr_dir io.MotorDirection) bool {
 			return true
 		}
 		if orders[curr_floor*3+int(io.BT_HallUp)] {
-			for i := 0; i < curr_floor-1; i++ {
-				if orders[i*3+int(io.BT_HallDown)] || orders[i*3+int(io.BT_Cab)] { //OR CAB
+			for f := 0; f < curr_floor; f++ {
+				fmt.Printf("floor= %d \n", f)
+				if orders[f*3+int(io.BT_HallDown)] || orders[f*3+int(io.BT_Cab)] { //OR CAB
+					fmt.Printf("found the below order \n")
 					return false
 				}
 			}
+			fmt.Printf("fucked up \n")
 			return true
 		}
 	}
@@ -127,7 +137,19 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int) {
 		case <-Door_timer.C: // door is closing
 			fmt.Printf("door closing \n")
 			io.SetDoorOpenLamp(false)
-			curr_state = 2 //idle
+			if orderInFloor(curr_floor) {
+				Door_timer = time.NewTimer(3 * time.Second)
+				io.SetDoorOpenLamp(true)
+				curr_state = 0 // go to door open state
+			} else if hasOrder() {
+				curr_state = 1 //running
+				d = takeAnyOrder(curr_floor)
+				io.SetMotorDirection(d)
+				curr_dir = d
+			} else {
+				curr_state = 2
+			} //idle
+
 			//check if order in floor before you leave
 
 			/*if OrderInSameDirection(curr_floor, curr_dir) {

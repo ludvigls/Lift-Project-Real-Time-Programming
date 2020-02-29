@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"time"
+	"os/exec"
 )
 
 // We define some custom struct to send over the network.
@@ -17,6 +18,11 @@ type AliveMsg struct {
 	Message string 
 	Id      string
 	Iter    int // Will change to state for actual project
+}
+
+func spawnBackup() {
+	(exec.Command("gnome-terminal", "-x", "sh", "-c", "go run network_node.go -id=2")).Run()
+	fmt.Println("Created new backup!")
 }
 
 
@@ -29,10 +35,7 @@ func counter(countCh chan<- int, start_from int) { // Will be fsm for actual pro
 	}
 }
 
-func main() {
-	// Our id can be anything. Here we pass it on the command line, using
-	//  `go run main.go -id=our_id`
-	
+func main() {	//  `go run main.go -id=our_id`
 	var id string
 	var count_glob int
 
@@ -43,8 +46,7 @@ func main() {
 	// (But since we can run multiple programs on the same PC, we also append the
 	//  process ID)
 	
-	//Useless for now
-	if id == "" {
+	if id == "" { //Useless for now
 		localIP, err := localip.LocalIP()
 		if err != nil {
 			fmt.Println(err)
@@ -52,7 +54,6 @@ func main() {
 		}
 		id = fmt.Sprintf("peer-%s-%d", localIP, os.Getpid())
 	}
-
 
 	// We make a channel for receiving updates on the id's of the peers that are
 	//  alive on the network
@@ -72,9 +73,9 @@ func main() {
 	idCh := make(chan string)
 
 	if id == "1" {
+		spawnBackup()
 		go counter(countCh, 0)
 	}
-
 	// ... and start the transmitter/receiver pair on some port
 	// These functions can take any number of channels! It is also possible to
 	//  start multiple transmitters/receivers on the same port.
@@ -83,9 +84,7 @@ func main() {
 	go bcast.Transmitter(16569, aliveTx)
 	go bcast.Receiver(16569, aliveRx)
 
-
 	//Everyone sends I'm alive functionality every sec	
-
 	go func(idCh chan string) {
 		AliveMsg := AliveMsg{"I'm Alive", id, 0}
 		for {
@@ -95,14 +94,12 @@ func main() {
 				default:
 					AliveMsg.Iter = count_glob
 					aliveTx <- AliveMsg
-					time.Sleep(500 * time.Millisecond)
+					time.Sleep(100 * time.Millisecond)
 				}
 		}
 	}(idCh)
-	
 
-
-	fmt.Println("Started with id: ", id)
+	fmt.Println("Initialized with id:", id)
 	for {
 		select {
 		case p := <-peerUpdateCh:
@@ -113,38 +110,34 @@ func main() {
 
 			if (len(p.Lost) > 0) { //someone lost
 			    if p.Lost[0] == "1" && id == "2" { // Secondary lost heartbeat from primary
-			    	fmt.Printf("I SHOULD BECOME PRIMARY and count from %d \n", count_glob)
+			    	fmt.Printf("Lost primary \n")
+			    	fmt.Printf("Will become primary and count from:  %d \n", count_glob)
 			    	id = "1"
 
 			    	// TODO, only sent once, not correct way (works with no package loss)
 			    	idCh <- id
+			    	peerTxEnable <- false
+			    	go peers.Transmitter(15647, id, peerTxEnable)
 
-			    	// Update about role change, 2 becomes 1. Aka 2 lost, 1 new.
-			    	//p.New = "1"
-			    	//p.Lost[0] = "2"
-			    	//p.Peers[0] = "1"
-	
 			    	//TODO, This is shit and should not be like this
 			    	go counter(countCh, count_glob)
 
-			    	//peerUpdateCh <- peers.PeerUpdate{ p.Peers, p.New, p.Lost } // TODO, does not work with several lifts
-
 			    } else if p.Lost[0] == "2" && id == "1" { // Primary lost heartbeat from secondary
-			    	fmt.Printf("I SHOULD CREATE NEW BACKUP \n")
+			    	fmt.Printf("Lost backup \n")
+			    	spawnBackup()
 			    } else {
-			    	fmt.Printf("We lost someone that isnt backup, should be handled... \n")
+			    	fmt.Printf("Lost someone non backup/primary, should be handled... \n")
 			    }
 			}
 		case a := <-aliveRx: //msg on channel aliveRx
-			fmt.Printf("Recieving from: %s \n", a.Id)
+			//fmt.Printf("Recieving from: %s \n", a.Id)
 			if id == "2" && a.Id == "1" { // If I'm secondary and msg from primary
-				fmt.Printf("Received from primary: %#v\n", a)
+				//fmt.Printf("Received from primary: %#v\n", a)
 				count_glob = a.Iter // backup the count
 			}
-		
-		case a := <- countCh: // a LOCAL message only heard on local computer
+		case a := <- countCh: // LOCAL message only heard on local computer
 			count_glob = a
-			fmt.Printf("Primary counting... %d \n", count_glob)
+			fmt.Printf("Primary counting: %d \n", count_glob)
 		}
 	}
 }

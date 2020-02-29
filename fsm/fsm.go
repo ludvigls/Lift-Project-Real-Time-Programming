@@ -19,7 +19,7 @@ const (
 
 var orders [numFloors * 3]bool // [. . .   . . .   . . .   . . . ] (3 x 1.etj, 3 x 2.etj ....)
 
-func removeOrdersInFloor(floor int) {
+func removeOrdersInFloor(floor int) { // Remove orders + turn off lamps
 	for i := 0; i < 3; i++ { // up, down, cab
 		orders[floor*3+i] = false
 		io.SetButtonLamp(io.ButtonType(i), floor, false)
@@ -36,34 +36,30 @@ func orderInFloor(curr_floor int) bool {
 	return false
 }
 func stopForOrder(curr_floor int, curr_dir io.MotorDirection) bool {
-
 	if curr_dir == io.MD_Up {
-		if orders[curr_floor*3+int(io.BT_HallUp)] || orders[curr_floor+int(io.BT_Cab)] {
-			removeOrdersInFloor(curr_floor)
+		if orders[curr_floor*3+int(io.BT_HallUp)] || orders[curr_floor*3+int(io.BT_Cab)] { // take orders in curr floor if order goes up / cab order
 			return true
-
 		}
-		for i := curr_floor + 1; i < numFloors; i++ {
-			if orders[i*3+int(io.BT_HallUp)] || orders[i+int(io.BT_Cab)] { //OR CAB
-				return false
+		if orders[curr_floor*3+int(io.BT_HallDown)] { // if order in curr floor wants to go down
+			for i := curr_floor + 1; i < numFloors; i++ { //DONT take the order, if there are other orders in up dir above you / cab orders above
+				if orders[i*3+int(io.BT_HallUp)] || orders[i*3+int(io.BT_Cab)] {
+					return false
+				}
 			}
+			return true
 		}
-		removeOrdersInFloor(curr_floor)
-		return true
+		//Equivalent logic but for down direction
 	} else if curr_dir == io.MD_Down {
-		if orders[curr_floor*3+int(io.BT_HallDown)] || orders[curr_floor+int(io.BT_Cab)] {
-			removeOrdersInFloor(curr_floor)
+		if orders[curr_floor*3+int(io.BT_HallDown)] || orders[curr_floor*3+int(io.BT_Cab)] {
 			return true
 		}
 		if orders[curr_floor*3+int(io.BT_HallUp)] {
 			for i := 0; i < curr_floor-1; i++ {
-				if orders[i*3+int(io.BT_HallDown)] || orders[i+int(io.BT_Cab)] { //OR CAB
+				if orders[i*3+int(io.BT_HallDown)] || orders[i*3+int(io.BT_Cab)] { //OR CAB
 					return false
 				}
 			}
-			removeOrdersInFloor(curr_floor)
 			return true
-
 		}
 	}
 	//removeOrdersInFloor(curr_floor)
@@ -125,6 +121,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int) {
 	io.SetMotorDirection(d)
 	var curr_state state
 	curr_state = 2 //idle
+
 	for {
 		select {
 		case <-Door_timer.C: // door is closing
@@ -178,13 +175,16 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int) {
 		case a := <-drv_floors:
 			curr_floor = a
 			if stopForOrder(curr_floor, curr_dir) {
+				removeOrdersInFloor(curr_floor)
 				d = io.MD_Stop
 				io.SetMotorDirection(d)
 				curr_state = 0 //door_open
 				fmt.Printf("STOPPING \n")
-			}
-			if a == 0 || a == numFloors-1 {
+			} else if a == 0 || a == numFloors-1 { // dont stop for order AND in top/bot floor
 				curr_state = 2 //idle
+			}
+			if a == 0 || a == numFloors-1 { //change dir if you're at top / bottom floor
+				// curr_state = 2 //idle
 				if curr_dir == io.MD_Up {
 					curr_dir = io.MD_Down
 				} else {
@@ -219,6 +219,8 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int) {
 		switch curr_state {
 		case 0: //door open
 			fmt.Printf("door open \n")
+			removeOrdersInFloor(curr_floor)
+
 			Door_timer = time.NewTimer(3 * time.Second)
 			io.SetDoorOpenLamp(true)
 		case 1: //running
@@ -232,8 +234,10 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int) {
 			if d == io.MD_Stop && orderInFloor(curr_floor) {
 				Door_timer = time.NewTimer(3 * time.Second)
 				io.SetDoorOpenLamp(true)
+				removeOrdersInFloor(curr_floor)
+
 				curr_state = 0 //door open
-			} else {
+			} else if d != io.MD_Stop {
 				fmt.Printf("Setting direction")
 				curr_dir = d
 				curr_state = 1 //running

@@ -16,7 +16,39 @@ func RemoveOrdersInFloor(floor int) {
         io.SetButtonLamp(io.ButtonType(i), floor, false)
     }
 }
-
+func OrderInSameDirection(curr_floor int) bool{
+    if curr_dir == io.MD_Up{
+        for i:=curr_floor+1;i<numFloors;i++{
+            if(orders[i*3+int(io.BT_HallUp)]||orders[i+int(io.BT_Cab)]){ //OR CAB
+                return true
+            }
+        }
+    }
+    else if(curr_dir==io.MD_Down){
+        for i:=0;i<curr_floor-1;i++{
+            if(orders[i*3+int(io.BT_HallDown)]||orders[i+int(io.BT_Cab)){ //OR CAB
+                return true
+            }
+        }
+    }
+    return false
+}
+//func OrderInFloor(int floor) bool{  //check if order in floor
+//}
+func randomOrderDir(curr_floor) io.MotorDirection{
+    for f:=0;f<numFloors;f++{
+        for b:=0;b<=2;b++{
+            if orders[3*f+b]:
+                if f>curr_floor{
+                    return io.MD_Up
+                }
+                else if f<curr_floor{
+                    return io.MD_up
+                }
+        }
+    }
+    return io.MD_Stop
+}
 func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int){
     Door_timer := time.NewTimer(120*time.Second) //init door timer
 
@@ -31,6 +63,16 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int){
         select {
             case <- Door_timer.C : // door is closing
                 io.SetDoorOpenLamp(false)
+
+                //check if order in floor before you leave
+                else if (OrderInSameDirection(curr_floor)){
+                    d=curr_dir
+                }
+                else{
+                    d=randomOrderDir(curr_floor)
+                }
+                SetMotorDirection(curr_dir)
+
                 // se om det finnes orders
                 // gå i riktig retning
 

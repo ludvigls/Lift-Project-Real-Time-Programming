@@ -49,7 +49,7 @@ func stopForOrder(curr_floor int, curr_dir io.MotorDirection) bool {
 		}
 		if orders[curr_floor*3+int(io.BT_HallDown)] { // if order in curr floor wants to go down
 			for f := curr_floor + 1; f < numFloors; f++ { //DONT take the order, if there are other orders in up dir above you / cab orders above
-				if orders[f*3+int(io.BT_HallUp)] || orders[f*3+int(io.BT_Cab)] {
+				if orders[f*3+int(io.BT_HallUp)] || orders[f*3+int(io.BT_Cab)] || orders[f*3+int(io.BT_HallDown)] {
 					return false
 				}
 			}
@@ -63,7 +63,7 @@ func stopForOrder(curr_floor int, curr_dir io.MotorDirection) bool {
 		if orders[curr_floor*3+int(io.BT_HallUp)] {
 			for f := 0; f < curr_floor; f++ {
 				fmt.Printf("floor= %d \n", f)
-				if orders[f*3+int(io.BT_HallDown)] || orders[f*3+int(io.BT_Cab)] { //OR CAB
+				if orders[f*3+int(io.BT_HallDown)] || orders[f*3+int(io.BT_Cab)] || orders[f*3+int(io.BT_HallUp)] { //OR CAB
 
 					return false
 				}

@@ -21,7 +21,7 @@ type AliveMsg struct {
 }
 
 func spawnBackup() {
-	(exec.Command("gnome-terminal", "-x", "sh", "-c", "go run network_node.go -id=2")).Run()
+	(exec.Command("gnome-terminal", "-x", "sh", "-c", "go run process_pairs.go -id=2")).Run()
 	fmt.Println("Created new backup!")
 }
 

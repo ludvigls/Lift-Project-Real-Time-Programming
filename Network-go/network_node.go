@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"time"
-	"os/exec"
 	"strconv"
 )
 
@@ -16,16 +15,10 @@ import (
 // Note that all members we want to transmit must be public. Any private members
 //  will be received as zero-values.
 type AliveMsg struct {
-	Message string // Orders - id 
+	Message string // Orders - id
 	Id      string
 	Iter    int // Will change to state for actual project
 }
-
-func spawnBackup() {
-	(exec.Command("gnome-terminal", "-x", "sh", "-c", "go run network_node.go -id=2")).Run()
-	fmt.Println("Created new backup!")
-}
-
 
 func counter(countCh chan<- int, start_from int) { // Will be fsm for actual project
 	count := start_from
@@ -36,17 +29,14 @@ func counter(countCh chan<- int, start_from int) { // Will be fsm for actual pro
 	}
 }
 
-func main() {	//  `go run main.go -id=our_id`
+func main() {	//  `go run network_node.go -id=our_id`
 	var id string
-
 	var count_glob int
 
 	flag.StringVar(&id, "id", "", "id of this peer")
 	flag.Parse()
 
 	id_int, _ := strconv.Atoi(id)
-	fmt.Println("hei %d \n", id_int)
-
 
 	// ... or alternatively, we can use the local IP address.
 	// (But since we can run multiple programs on the same PC, we also append the
@@ -61,8 +51,7 @@ func main() {	//  `go run main.go -id=our_id`
 		id = fmt.Sprintf("peer-%s-%d", localIP, os.Getpid())
 	}
 
-	// We make a channel for receiving updates on the id's of the peers that are
-	//  alive on the network
+	// We make a channel for receiving updates on the id's of the peers that are alive on network
 	peerUpdateCh := make(chan peers.PeerUpdate)
 	// We can disable/enable the transmitter after it has been started.
 	// This could be used to signal that we are somehow "unavailable".
@@ -79,8 +68,7 @@ func main() {	//  `go run main.go -id=our_id`
 	idCh := make(chan string)
 
 	if id == "1" {
-		//spawnBackup()
-		go counter(countCh, 0)
+		go counter(countCh, 0) // Fsm only run from master
 	}
 	// ... and start the transmitter/receiver pair on some port
 	// These functions can take any number of channels! It is also possible to
@@ -90,7 +78,7 @@ func main() {	//  `go run main.go -id=our_id`
 	go bcast.Transmitter(16569, aliveTx)
 	go bcast.Receiver(16569, aliveRx)
 
-	//Everyone sends I'm alive functionality every sec	
+	//Everyone sends I'm alive functionality every sec
 	go func(idCh chan string) {
 		AliveMsg := AliveMsg{"I'm Alive", id, 0}
 		for {
@@ -102,8 +90,8 @@ func main() {	//  `go run main.go -id=our_id`
 					aliveTx <- AliveMsg
 					time.Sleep(100 * time.Millisecond)
 				}
-		}
-	}(idCh)
+			}
+		}(idCh)
 
 	fmt.Println("Initialized with id:", id)
 	for {
@@ -117,38 +105,29 @@ func main() {	//  `go run main.go -id=our_id`
 			if (len(p.Lost) > 0) { //someone lost
 			    for i:=0; i < len(p.Lost); i++ {
 			    	lost_id, _ := strconv.Atoi(p.Lost[i])
-			    	if (lost_id < id_int) {
-			    		fmt.Println("lost someone smaller than me RAGEE!!")
+
+			    	if (lost_id < id_int) { // Role change
+			    		id_int -= 1
+			    		id = strconv.Itoa(id_int)
+			    		fmt.Println("Lost someone smaller, decrememted id, new id: ", id)
+		    			// TODO, only sent once, NOT correct way (works with no package loss)
+				    		// With package loss the id could be lost and the alive message would contain old id
+				    	idCh <- id
+				    	peerTxEnable <- false
+				    	go peers.Transmitter(15647, id, peerTxEnable)
+
+			    		if (id_int == 1) {
+					    	fmt.Printf("Will become primary and count from:  %d \n", count_glob)
+					    	go counter(countCh, count_glob) //TODO, This is MIGHT be shit (maybe a prev counter is running??)
+			    		}
 			    	} else {
-			    		fmt.Println("Someone bigger, dont care")
+			    		fmt.Println("I lost someone with larger id (or prev myself), so wont change id")
 			    	}
 			    }
-
-			    if p.Lost[0] == "1" && id == "2" { // Secondary lost heartbeat from primary
-			    	fmt.Printf("Lost primary \n")
-			    	fmt.Printf("Will become primary and count from:  %d \n", count_glob)
-			    	id = "1"
-			    	id_int, _= strconv.Atoi(id)
-
-			    	// TODO, only sent once, not correct way (works with no package loss)
-			    	idCh <- id
-			    	peerTxEnable <- false
-			    	go peers.Transmitter(15647, id, peerTxEnable)
-
-			    	//TODO, This is might be shit and should not be like this
-			    	go counter(countCh, count_glob)
-
-			    } else if p.Lost[0] == "2" && id == "1" { // Primary lost heartbeat from secondary
-			    	fmt.Printf("Lost backup \n")
-			    	//spawnBackup()
-			    } //else {
-			    	//fmt.Printf("Lost someone non backup/primary, should be handled... \n")
-			    //}
 			}
-		case a := <-aliveRx: //msg on channel aliveRx
+		case a := <-aliveRx:
 			//fmt.Printf("Recieving from: %s \n", a.Id)
-			if id == "2" && a.Id == "1" { // If I'm secondary and msg from primary
-				//fmt.Printf("Received from primary: %#v\n", a)
+			if id == "2" && a.Id == "1" { // Store counter if i'm secondary
 				count_glob = a.Iter // backup the count
 			}
 		case a := <- countCh: // LOCAL message only heard on local computer

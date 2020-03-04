@@ -7,6 +7,12 @@ import (
 	"../io"
 )
 
+type State struct {
+	exe_orders []bool
+	floor      int
+	dir        int
+}
+
 //const numFloors = 4
 
 type state int
@@ -17,6 +23,11 @@ const (
 	idle      int = 2
 )
 
+func sendState(state_chan chan State, floor int, dir int, orders []bool) {
+	state := State{orders, floor, dir}
+	state_chan <- state
+	return
+}
 func hasOrder(orders []bool) bool {
 	for i := 0; i < len(orders); i++ {
 		if orders[i] {
@@ -117,7 +128,7 @@ func whereToGo(curr_floor int, curr_dir io.MotorDirection, numFloors int, orders
 	return takeAnyOrder(curr_floor, numFloors, orders)
 }
 
-func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int) {
+func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, order_chan chan int, state_chan chan State) {
 	Door_timer := time.NewTimer(120 * time.Second) //init door timer
 	//var orders [numFloors * 3]bool                 // [. . .   . . .   . . .   . . . ] (3 x 1.etj, 3 x 2.etj ....)
 	orders := make([]bool, numFloors*3)
@@ -132,7 +143,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int) {
 	io.SetMotorDirection(d)
 	var curr_state state
 	curr_state = 2 //idle
-
+	sendState(state_chan, curr_floor, int(curr_dir), orders)
 	for {
 		select {
 		case <-Door_timer.C: // door is closing
@@ -155,6 +166,9 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int) {
 
 		case a := <-drv_buttons:
 			fmt.Printf("%+v\n", a)
+			fmt.Printf("we got to before message was sent at least")
+			order_chan <- (a.Floor*3 + int(a.Button))
+			fmt.Printf("we sent message")
 			io.SetButtonLamp(a.Button, a.Floor, true)
 			orders[(a.Floor)*3+int(a.Button)] = true
 			fmt.Println(orders)
@@ -198,7 +212,6 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int) {
 			//d = whereToGo(curr_dir, curr_floor)
 			d = whereToGo(curr_floor, curr_dir, numFloors, orders)
 			io.SetMotorDirection(d)
-			fmt.Printf("%d", orderInFloor(curr_floor, orders))
 
 			if d == io.MD_Stop && orderInFloor(curr_floor, orders) {
 				Door_timer = time.NewTimer(3 * time.Second)
@@ -213,6 +226,8 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int) {
 			}
 
 		}
+
+		sendState(state_chan, curr_floor, int(curr_dir), orders)
 
 	}
 }

@@ -118,28 +118,7 @@ func whereToGo(curr_floor int, curr_dir io.MotorDirection) io.MotorDirection {
 	return takeAnyOrder(curr_floor)
 }
 
-//}
 
-//func OrderInFloor(int floor) bool{  //check if order in floor
-//}
-/*
-
-func randomOrderDir(curr_floor int) io.MotorDirection {
-	for f := 0; f < numFloors; f++ {
-		for b := 0; b <= 2; b++ {
-			if orders[3*f+b] {
-				if f > curr_floor {
-					return io.MD_Up
-				} else if f < curr_floor {
-					return io.MD_Up
-				} else {
-					return io.MD_Stop
-				}
-			}
-		}
-	}
-	return io.MD_Stop
-}*/
 
 func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int) {
 	Door_timer := time.NewTimer(120 * time.Second) //init door timer
@@ -174,50 +153,13 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int) {
 				curr_state = 2
 			} //idle
 
-			//check if order in floor before you leave
-
-			/*if OrderInSameDirection(curr_floor, curr_dir) {
-				d = curr_dir
-			} else {
-				d = randomOrderDir(curr_floor)
-			}
-
-			io.SetMotorDirection(d)
-			*/
-
-			// se om det finnes orders
-			// gå i riktig retning
-
-			/*
-			   if (a.Floor>curr_floor) {
-			       d=io.MD_Up
-			       io.SetMotorDirection(d)
-			   } else if (a.Floor<curr_floor) {
-			       d=io.MD_Down
-			       io.SetMotorDirection(d)
-			   }
-			*/
 
 		case a := <-drv_buttons:
 			fmt.Printf("%+v\n", a)
 			io.SetButtonLamp(a.Button, a.Floor, true)
 			orders[(a.Floor)*3+int(a.Button)] = true
 			fmt.Println(orders)
-			/*
-				if d == io.MD_Stop { // Idle state
-					if a.Floor == curr_floor {
-						Door_timer = time.NewTimer(3 * time.Second)
-						RemoveOrdersInFloor(a.Floor)
-					} else if a.Floor > curr_floor {
-						d = io.MD_Up
-						io.SetMotorDirection(d)
-					} else if a.Floor < curr_floor {
-						d = io.MD_Down
-						io.SetMotorDirection(d)
-					}
-				}
-			*/
-
+		
 		case a := <-drv_floors:
 			curr_floor = a
 			io.SetFloorIndicator(curr_floor)
@@ -239,29 +181,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int) {
 					curr_dir = io.MD_Up
 				}
 			}
-			/*
-				for i := 0; i < 3; i++ { // i : up, down, cab
-					if orders[a*3+i] { // if order in floor
-						// TODO, IF ALSO IN RIGHT DIRECTION
-						d = io.MD_Stop
-						io.SetMotorDirection(d)
-						RemoveOrdersInFloor(a)
 
-						//Open door evt, kjøre til neste order
-						io.SetDoorOpenLamp(true)
-						Door_timer = time.NewTimer(3 * time.Second) //nsek timer
-					}
-				}
-			*/
-			/*
-			   fmt.Printf("%+v\n", a)
-			   if a == numFloors-1 {
-			       d = io.MD_Down
-			   } else if a == 0 {
-			       d = io.MD_Up
-			   }
-			   io.SetMotorDirection(d)
-			*/
 		}
 
 		switch curr_state {

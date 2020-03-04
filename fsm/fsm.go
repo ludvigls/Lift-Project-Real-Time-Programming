@@ -26,6 +26,7 @@ func hasOrder() bool {
 	}
 	return false
 }
+
 func removeOrdersInFloor(floor int) { // Remove orders + turn off lamps
 	for i := 0; i < 3; i++ { // up, down, cab
 		orders[floor*3+i] = false
@@ -149,6 +150,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int) {
 	curr_dir := io.MD_Up
 	io.SetMotorDirection(d)
 	curr_floor := <-drv_floors //wait until reaches floor
+	io.SetFloorIndicator(curr_floor)
 	d = io.MD_Stop
 	io.SetMotorDirection(d)
 	var curr_state state
@@ -218,6 +220,8 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int) {
 
 		case a := <-drv_floors:
 			curr_floor = a
+			io.SetFloorIndicator(curr_floor)
+
 			if stopForOrder(curr_floor, curr_dir) {
 				removeOrdersInFloor(curr_floor)
 				d = io.MD_Stop

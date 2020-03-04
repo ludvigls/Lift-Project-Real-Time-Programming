@@ -2,13 +2,14 @@ package main
 
 import (
 	"./network/bcast"
-	"./network/localip"
 	"./network/peers"
 	"flag"
 	"fmt"
-	"os"
 	"time"
 	"strconv"
+	// Needed for old 'if id == "" { '
+	//"os"
+	//"./network/localip"
 )
 
 // We define some custom struct to send over the network.
@@ -37,11 +38,18 @@ func main() {	//  `go run network_node.go -id=our_id`
 	flag.Parse()
 
 	id_int, _ := strconv.Atoi(id)
+	prev_role_id := -1
 
 	// ... or alternatively, we can use the local IP address.
 	// (But since we can run multiple programs on the same PC, we also append the
 	//  process ID)
 
+	if id == "" {
+		id_int = 0
+		id = "0"
+	}
+
+	/*
 	if id == "" { //Useless for now
 		localIP, err := localip.LocalIP()
 		if err != nil {
@@ -50,6 +58,7 @@ func main() {	//  `go run network_node.go -id=our_id`
 		}
 		id = fmt.Sprintf("peer-%s-%d", localIP, os.Getpid())
 	}
+	*/
 
 	// We make a channel for receiving updates on the id's of the peers that are alive on network
 	peerUpdateCh := make(chan peers.PeerUpdate)
@@ -95,6 +104,7 @@ func main() {	//  `go run network_node.go -id=our_id`
 
 	fmt.Println("Initialized with id:", id)
 	for {
+		//fmt.Printf("Ey \n", id)
 		select {
 		case p := <-peerUpdateCh:
 			fmt.Printf("Peer update:\n")
@@ -102,31 +112,63 @@ func main() {	//  `go run network_node.go -id=our_id`
 			fmt.Printf("  New:      %q\n", p.New)
 			fmt.Printf("  Lost:     %q\n", p.Lost)
 
+			if (id == "0") { // not yet assigned an id
+				fmt.Printf("Initializing my id... \n \n")
+				highest_id := -1
+				p_id := -1
+				for i:=0; i < len(p.Peers); i++ { // check whos on the network
+					p_id, _ = strconv.Atoi(p.Peers[i])
+					if (p_id > highest_id) {
+						highest_id = p_id
+					}
+				}
+				prev_role_id = id_int
+				id_int = highest_id+1
+				id = strconv.Itoa(id_int)
+
+	    		if (id_int == 1) {
+			    	fmt.Printf("Will become primary and count from:  %d \n", count_glob)
+			    	go counter(countCh, count_glob) //TODO, This is MIGHT be shit (maybe a prev counter is running??)
+	    		}
+
+				idCh <- id // ok cuz local message
+		    	go peers.Transmitter(15647, id, peerTxEnable) // create new
+		    	peerTxEnable <- false // remove myself
+
+
+			}
+
 			if (len(p.Lost) > 0) { //someone lost
 			    for i:=0; i < len(p.Lost); i++ {
 			    	lost_id, _ := strconv.Atoi(p.Lost[i])
 
 			    	if (lost_id < id_int) { // Role change
+			    		if (lost_id == prev_role_id) { // I didnt lose anyone.
+			    			break
+			    		}
+
+			    		fmt.Println("Lost someone smaller that wasnt me, will decrement this id: ", id)
+			    		prev_role_id = id_int 
 			    		id_int -= 1
 			    		id = strconv.Itoa(id_int)
-			    		fmt.Println("Lost someone smaller, decrememted id, new id: ", id)
-		    			// TODO, only sent once, NOT correct way (works with no package loss)
-				    		// With package loss the id could be lost and the alive message would contain old id
-				    	idCh <- id
-				    	peerTxEnable <- false
-				    	go peers.Transmitter(15647, id, peerTxEnable)
 
 			    		if (id_int == 1) {
 					    	fmt.Printf("Will become primary and count from:  %d \n", count_glob)
 					    	go counter(countCh, count_glob) //TODO, This is MIGHT be shit (maybe a prev counter is running??)
 			    		}
-			    	} else {
-			    		fmt.Println("I lost someone with larger id (or prev myself), so wont change id")
-			    	}
+
+				    	idCh <- id // ok cuz local message
+				    	peerTxEnable <- false
+				    	go peers.Transmitter(15647, id, peerTxEnable)
+
+
+			    	}// else {
+			    	//	fmt.Println("I lost someone with larger id (or prev myself), so wont change id")
+			    	//}
 			    }
 			}
 		case a := <-aliveRx:
-			//fmt.Printf("Recieving from: %s \n", a.Id)
+			//fmt.Printf("Recieving from id: %s, state:%d \n", a.Id, a.Iter)
 			if id == "2" && a.Id == "1" { // Store counter if i'm secondary
 				count_glob = a.Iter // backup the count
 			}

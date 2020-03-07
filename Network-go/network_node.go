@@ -31,6 +31,10 @@ func counter(countCh chan<- int, startFrom int) {
 }
 
 func isMaster(PeersList []string, myID int) bool {
+	if myID == -1 {
+		return false
+	}
+
 	for i := 0; i < len(PeersList); i++ {
 		peerID, _ := strconv.Atoi(PeersList[i])
 		if peerID < myID {
@@ -62,6 +66,9 @@ func main() { //  `go run network_node.go -id=our_id`
 		}
 		id = fmt.Sprintf("peer-%s-%d", localIP, os.Getpid())
 	}
+
+	// id = "-1"
+	// id_int, _ = strconv.Atoi(id)
 
 	// We make a channel for receiving updates on the id's of the peers that are alive on network
 	peerUpdateCh := make(chan peers.PeerUpdate)
@@ -111,9 +118,43 @@ func main() { //  `go run network_node.go -id=our_id`
 			fmt.Printf("  New:      %q\n", p.New)
 			fmt.Printf("  Lost:     %q\n", p.Lost)
 
-			//iammaster := isMaster(p.Peers, id_int)
-			//fmt.Println("WHAAAAAAAAA %d", iammaster)
 			PeerList = p.Peers
+
+			// Initialize ID
+			/*
+				if id == "-1" {
+					highest_id := -1
+					p_id := -1
+					for i := 0; i < len(PeerList); i++ { //find the highest id
+						p_id, _ = strconv.Atoi(p.Peers[i])
+						if p_id > highest_id {
+							highest_id = p_id
+						}
+					}
+					id_int = highest_id + 1
+					id = strconv.Itoa(id_int)
+					idCh <- id // ok cuz local message
+					peerTxEnable <- false
+					go peers.Transmitter(15647, id, peerTxEnable)
+				}
+			*/
+
+			// if id == "10000" { // not yet assigned an id
+			// 	fmt.Printf("Initializing my id... \n \n")
+			// 	highest_id := -1
+			// 	p_id := -1
+			// 	for i := 0; i < len(p.Peers); i++ { // check whos on the network
+			// 		p_id, _ = strconv.Atoi(p.Peers[i])
+			// 		if p_id > highest_id {
+			// 			highest_id = p_id
+			// 		}
+			// 	}
+			// 	id_int = highest_id + 1
+			// 	id = strconv.Itoa(id_int)
+			// 	fmt.Println(id_int)
+			// }
+
+			//fmt.Println(PeerList)
 			if isMaster(PeerList, id_int) {
 				fmt.Printf("I am primary and count from:  %d \n", count_glob)
 				if !hasBeenMaster {
@@ -122,7 +163,7 @@ func main() { //  `go run network_node.go -id=our_id`
 				}
 			}
 		case a := <-aliveRx:
-			id_i, _ := strconv.Atoi(a.Id)
+			id_i, _ := strconv.Atoi(a.ID)
 			if isMaster(PeerList, id_i) { // Every node stores from primary
 				count_glob = a.Iter // backup the count
 			}

@@ -27,6 +27,7 @@ func testState(state_chan chan fsm.State) {
 func main() {
 
 	numFloors := 4
+	numElev := 2
 	io.Init("localhost:15657", numFloors)
 
 	drv_buttons := make(chan io.ButtonEvent)
@@ -37,7 +38,7 @@ func main() {
 	go io.Io(drv_buttons, drv_floors)
 
 	go fsm.Fsm(drv_buttons, drv_floors, numFloors, order_chan, state_chan, 1)
-	go orderDelegator.OrderDelegator(order_chan, state_chan, numFloors)
+	go orderDelegator.OrderDelegator(order_chan, state_chan, numFloors, numElev)
 	for {
 	}
 

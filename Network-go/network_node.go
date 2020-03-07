@@ -28,19 +28,34 @@ func counter(countCh chan<- int, startFrom int) {
 	}
 }
 
-func isMaster(PeersList []string, myID int) bool {
-	if myID == -1 {
+func isMaster(PeersList []string, ID int) bool {
+	if ID == -1 {
 		return false
 	}
 
 	for i := 0; i < len(PeersList); i++ {
 		peerID, _ := strconv.Atoi(PeersList[i])
-		if peerID < myID {
+		if peerID < ID {
 			return false
 		}
 	}
 	return true
 }
+
+// func aliveSender(idCh chan string, aliveTx chan<- AliveMsg, id string, countCh chan int) {
+// 	AliveMsg := AliveMsg{"I'm Alive", id, 0}
+// 	for {
+// 		select {
+// 		case a := <-idCh:
+// 			AliveMsg.ID = a
+// 		case a := <-countCh:
+// 			AliveMsg.Iter = a
+// 		default:
+// 			aliveTx <- AliveMsg // send alive message
+// 			time.Sleep(100 * time.Millisecond)
+// 		}
+// 	}
+// }
 
 func main() { //  `go run network_node.go -id=our_id`
 	var id string
@@ -97,6 +112,7 @@ func main() { //  `go run network_node.go -id=our_id`
 		fmt.Println("I HAS ID!!")
 		go peers.Transmitter(15647, id, peerTxEnable)
 		go bcast.Transmitter(16569, aliveTx)
+		//go aliveSender(idCh, aliveTx, id, countCh)
 	}
 
 	//Everyone sends I'm alive functionality every sec
@@ -105,6 +121,7 @@ func main() { //  `go run network_node.go -id=our_id`
 		for {
 			select {
 			case a := <-idCh:
+				fmt.Println("shey")
 				AliveMsg.ID = a
 			default:
 				AliveMsg.Iter = count_glob
@@ -126,27 +143,15 @@ func main() { //  `go run network_node.go -id=our_id`
 			PeerList = p.Peers
 
 			// Initialize ID
-
-			// if id == "-1" {
-			// 	if len(p.Peers) == 1 {
-			// 		id = "1"
-			// 		id_int, _ = strconv.Atoi(id)
-			// 		idCh <- id // ok cuz local message
-			// 		peerTxEnable <- false
-			// 		go peers.Transmitter(15647, id, peerTxEnable)
-			// 	}
-			// }
-
 			if id == "-1" {
 				time_out := false
-				timer := time.NewTimer(10 * time.Millisecond) //uses Xms to get latest message
+				timer := time.NewTimer(100 * time.Millisecond) //uses Xms to get latest message
 				for !time_out {
 					select {
 					case <-timer.C: // door is closing
 						time_out = true
 					case a := <-peerUpdateCh:
 						PeerList = a.Peers
-						//fmt.Println("PEER LIST!!!", PeerList[1])
 					}
 				}
 
@@ -165,24 +170,9 @@ func main() { //  `go run network_node.go -id=our_id`
 				fmt.Println("Initialized with id %s", id)
 				go peers.Transmitter(15647, id, peerTxEnable)
 				go bcast.Transmitter(16569, aliveTx)
+				idCh <- id
 			}
 
-			// if id == "10000" { // not yet assigned an id
-			// 	fmt.Printf("Initializing my id... \n \n")
-			// 	highest_id := -1
-			// 	p_id := -1
-			// 	for i := 0; i < len(p.Peers); i++ { // check whos on the network
-			// 		p_id, _ = strconv.Atoi(p.Peers[i])
-			// 		if p_id > highest_id {
-			// 			highest_id = p_id
-			// 		}
-			// 	}
-			// 	id_int = highest_id + 1
-			// 	id = strconv.Itoa(id_int)
-			// 	fmt.Println(id_int)
-			// }
-
-			//fmt.Println(PeerList)
 			if isMaster(PeerList, id_int) {
 				fmt.Printf("I am primary and count from:  %d \n", count_glob)
 				if !hasBeenMaster {

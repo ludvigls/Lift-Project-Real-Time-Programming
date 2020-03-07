@@ -1,37 +1,50 @@
 package main
 
 import (
-	"./network/bcast"
-	"./network/localip"
-	"./network/peers"
 	"flag"
 	"fmt"
 	"os"
-	"time"
 	"strconv"
+	"time"
+
+	"./network/bcast"
+	"./network/localip"
+	"./network/peers"
 )
 
 // We define some custom struct to send over the network.
 // Note that all members we want to transmit must be public. Any private members
 //  will be received as zero-values.
 type AliveMsg struct {
-	Message string // Orders - id
-	Id      string
-	Iter    int // Will change to state for actual project
+	Message string
+	ID      string
+	Iter    int
 }
 
-func counter(countCh chan<- int, start_from int) { // Will be fsm for actual project
-	count := start_from
+func counter(countCh chan<- int, startFrom int) {
+	count := startFrom
 	for {
 		count++
 		countCh <- count
-		time.Sleep(1* time.Second)
+		time.Sleep(1 * time.Second)
 	}
 }
 
-func main() {	//  `go run network_node.go -id=our_id`
+func isMaster(PeersList []string, myID int) bool {
+	for i := 0; i < len(PeersList); i++ {
+		peerID, _ := strconv.Atoi(PeersList[i])
+		if peerID < myID {
+			return false
+		}
+	}
+	return true
+}
+
+func main() { //  `go run network_node.go -id=our_id`
 	var id string
 	var count_glob int
+	var PeerList []string
+	var hasBeenMaster bool
 
 	flag.StringVar(&id, "id", "", "id of this peer")
 	flag.Parse()
@@ -41,7 +54,6 @@ func main() {	//  `go run network_node.go -id=our_id`
 	// ... or alternatively, we can use the local IP address.
 	// (But since we can run multiple programs on the same PC, we also append the
 	//  process ID)
-
 	if id == "" { //Useless for now
 		localIP, err := localip.LocalIP()
 		if err != nil {
@@ -56,7 +68,7 @@ func main() {	//  `go run network_node.go -id=our_id`
 	// We can disable/enable the transmitter after it has been started.
 	// This could be used to signal that we are somehow "unavailable".
 	peerTxEnable := make(chan bool)
-	
+
 	go peers.Transmitter(15647, id, peerTxEnable)
 	go peers.Receiver(15647, peerUpdateCh)
 
@@ -67,13 +79,10 @@ func main() {	//  `go run network_node.go -id=our_id`
 	countCh := make(chan int)
 	idCh := make(chan string)
 
-	if id == "1" {
-		go counter(countCh, 0) // Fsm only run from master
-	}
 	// ... and start the transmitter/receiver pair on some port
 	// These functions can take any number of channels! It is also possible to
 	//  start multiple transmitters/receivers on the same port.
-	
+
 	// A transmitter and receiver transmitting and recieving to the same port
 	go bcast.Transmitter(16569, aliveTx)
 	go bcast.Receiver(16569, aliveRx)
@@ -82,16 +91,16 @@ func main() {	//  `go run network_node.go -id=our_id`
 	go func(idCh chan string) {
 		AliveMsg := AliveMsg{"I'm Alive", id, 0}
 		for {
-			select { 
-				case a := <- idCh:
-					AliveMsg.Id = a
-				default:
-					AliveMsg.Iter = count_glob
-					aliveTx <- AliveMsg
-					time.Sleep(100 * time.Millisecond)
-				}
+			select {
+			case a := <-idCh:
+				AliveMsg.ID = a
+			default:
+				AliveMsg.Iter = count_glob
+				aliveTx <- AliveMsg
+				time.Sleep(100 * time.Millisecond)
 			}
-		}(idCh)
+		}
+	}(idCh)
 
 	fmt.Println("Initialized with id:", id)
 	for {
@@ -102,35 +111,22 @@ func main() {	//  `go run network_node.go -id=our_id`
 			fmt.Printf("  New:      %q\n", p.New)
 			fmt.Printf("  Lost:     %q\n", p.Lost)
 
-			if (len(p.Lost) > 0) { //someone lost
-			    for i:=0; i < len(p.Lost); i++ {
-			    	lost_id, _ := strconv.Atoi(p.Lost[i])
-
-			    	if (lost_id < id_int) { // Role change
-			    		id_int -= 1
-			    		id = strconv.Itoa(id_int)
-			    		fmt.Println("Lost someone smaller, decrememted id, new id: ", id)
-		    			// TODO, only sent once, NOT correct way (works with no package loss)
-				    		// With package loss the id could be lost and the alive message would contain old id
-				    	idCh <- id
-				    	peerTxEnable <- false
-				    	go peers.Transmitter(15647, id, peerTxEnable)
-
-			    		if (id_int == 1) {
-					    	fmt.Printf("Will become primary and count from:  %d \n", count_glob)
-					    	go counter(countCh, count_glob) //TODO, This is MIGHT be shit (maybe a prev counter is running??)
-			    		}
-			    	} else {
-			    		fmt.Println("I lost someone with larger id (or prev myself), so wont change id")
-			    	}
-			    }
+			//iammaster := isMaster(p.Peers, id_int)
+			//fmt.Println("WHAAAAAAAAA %d", iammaster)
+			PeerList = p.Peers
+			if isMaster(PeerList, id_int) {
+				fmt.Printf("I am primary and count from:  %d \n", count_glob)
+				if !hasBeenMaster {
+					go counter(countCh, count_glob)
+					hasBeenMaster = true
+				}
 			}
 		case a := <-aliveRx:
-			//fmt.Printf("Recieving from: %s \n", a.Id)
-			if id == "2" && a.Id == "1" { // Store counter if i'm secondary
+			id_i, _ := strconv.Atoi(a.Id)
+			if isMaster(PeerList, id_i) { // Every node stores from primary
 				count_glob = a.Iter // backup the count
 			}
-		case a := <- countCh: // LOCAL message only heard on local computer
+		case a := <-countCh: // LOCAL message only heard on local computer
 			count_glob = a
 			fmt.Printf("Primary counting: %d \n", count_glob)
 		}

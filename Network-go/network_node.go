@@ -3,12 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"strconv"
 	"time"
 
 	"./network/bcast"
-	"./network/localip"
 	"./network/peers"
 )
 
@@ -58,17 +56,20 @@ func main() { //  `go run network_node.go -id=our_id`
 	// ... or alternatively, we can use the local IP address.
 	// (But since we can run multiple programs on the same PC, we also append the
 	//  process ID)
-	if id == "" { //Useless for now
-		localIP, err := localip.LocalIP()
-		if err != nil {
-			fmt.Println(err)
-			localIP = "DISCONNECTED"
-		}
-		id = fmt.Sprintf("peer-%s-%d", localIP, os.Getpid())
-	}
+	// if id == "" { //Useless for now
+	// 	localIP, err := localip.LocalIP()
+	// 	if err != nil {
+	// 		fmt.Println(err)
+	// 		localIP = "DISCONNECTED"
+	// 	}
+	// 	id = fmt.Sprintf("peer-%s-%d", localIP, os.Getpid())
 
-	// id = "-1"
-	// id_int, _ = strconv.Atoi(id)
+	// }
+
+	if id == "" {
+		id = "-1"
+		id_int, _ = strconv.Atoi(id)
+	}
 
 	// We make a channel for receiving updates on the id's of the peers that are alive on network
 	peerUpdateCh := make(chan peers.PeerUpdate)
@@ -76,8 +77,7 @@ func main() { //  `go run network_node.go -id=our_id`
 	// This could be used to signal that we are somehow "unavailable".
 	peerTxEnable := make(chan bool)
 
-	go peers.Transmitter(15647, id, peerTxEnable)
-	go peers.Receiver(15647, peerUpdateCh)
+	//go peers.Transmitter(15647, id, peerTxEnable)
 
 	// We make channels for sending and receiving our custom data types
 	aliveTx := make(chan AliveMsg)
@@ -91,8 +91,13 @@ func main() { //  `go run network_node.go -id=our_id`
 	//  start multiple transmitters/receivers on the same port.
 
 	// A transmitter and receiver transmitting and recieving to the same port
-	go bcast.Transmitter(16569, aliveTx)
+	go peers.Receiver(15647, peerUpdateCh)
 	go bcast.Receiver(16569, aliveRx)
+	if id != "-1" {
+		fmt.Println("I HAS ID!!")
+		go peers.Transmitter(15647, id, peerTxEnable)
+		go bcast.Transmitter(16569, aliveTx)
+	}
 
 	//Everyone sends I'm alive functionality every sec
 	go func(idCh chan string) {
@@ -121,23 +126,46 @@ func main() { //  `go run network_node.go -id=our_id`
 			PeerList = p.Peers
 
 			// Initialize ID
-			/*
-				if id == "-1" {
-					highest_id := -1
-					p_id := -1
-					for i := 0; i < len(PeerList); i++ { //find the highest id
-						p_id, _ = strconv.Atoi(p.Peers[i])
-						if p_id > highest_id {
-							highest_id = p_id
-						}
+
+			// if id == "-1" {
+			// 	if len(p.Peers) == 1 {
+			// 		id = "1"
+			// 		id_int, _ = strconv.Atoi(id)
+			// 		idCh <- id // ok cuz local message
+			// 		peerTxEnable <- false
+			// 		go peers.Transmitter(15647, id, peerTxEnable)
+			// 	}
+			// }
+
+			if id == "-1" {
+				time_out := false
+				timer := time.NewTimer(10 * time.Millisecond) //uses Xms to get latest message
+				for !time_out {
+					select {
+					case <-timer.C: // door is closing
+						time_out = true
+					case a := <-peerUpdateCh:
+						PeerList = a.Peers
+						//fmt.Println("PEER LIST!!!", PeerList[1])
 					}
-					id_int = highest_id + 1
-					id = strconv.Itoa(id_int)
-					idCh <- id // ok cuz local message
-					peerTxEnable <- false
-					go peers.Transmitter(15647, id, peerTxEnable)
 				}
-			*/
+
+				//Find highest ID in peers list
+				highest_id := -1
+				p_id := -1
+				for i := 0; i < len(PeerList); i++ { //find the highest id
+					p_id, _ = strconv.Atoi(PeerList[i])
+					if p_id > highest_id {
+						highest_id = p_id
+					}
+				}
+				id_int = highest_id + 1
+				id = strconv.Itoa(id_int)
+
+				fmt.Println("Initialized with id %s", id)
+				go peers.Transmitter(15647, id, peerTxEnable)
+				go bcast.Transmitter(16569, aliveTx)
+			}
 
 			// if id == "10000" { // not yet assigned an id
 			// 	fmt.Printf("Initializing my id... \n \n")
@@ -163,6 +191,7 @@ func main() { //  `go run network_node.go -id=our_id`
 				}
 			}
 		case a := <-aliveRx:
+			//fmt.Println("alive message from: ", a.ID)
 			id_i, _ := strconv.Atoi(a.ID)
 			if isMaster(PeerList, id_i) { // Every node stores from primary
 				count_glob = a.Iter // backup the count

@@ -7,10 +7,16 @@ import (
 	"../io"
 )
 
+type Order struct {
+	Location io.ButtonEvent
+	Id       int
+}
+
 type State struct {
-	exe_orders []bool
-	floor      int
-	dir        int
+	Exe_orders []bool
+	Floor      int
+	Dir        int
+	Id         int
 }
 
 //const numFloors = 4
@@ -23,8 +29,8 @@ const (
 	idle      int = 2
 )
 
-func sendState(state_chan chan State, floor int, dir int, orders []bool) {
-	state := State{orders, floor, dir}
+func sendState(state_chan chan State, floor int, dir int, orders []bool, id int) {
+	state := State{orders, floor, dir, id}
 	state_chan <- state
 	return
 }
@@ -128,7 +134,7 @@ func whereToGo(curr_floor int, curr_dir io.MotorDirection, numFloors int, orders
 	return takeAnyOrder(curr_floor, numFloors, orders)
 }
 
-func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, order_chan chan int, state_chan chan State) {
+func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, order_chan chan Order, state_chan chan State, id int) {
 	Door_timer := time.NewTimer(120 * time.Second) //init door timer
 	//var orders [numFloors * 3]bool                 // [. . .   . . .   . . .   . . . ] (3 x 1.etj, 3 x 2.etj ....)
 	orders := make([]bool, numFloors*3)
@@ -143,7 +149,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, or
 	io.SetMotorDirection(d)
 	var curr_state state
 	curr_state = 2 //idle
-	sendState(state_chan, curr_floor, int(curr_dir), orders)
+	sendState(state_chan, curr_floor, int(curr_dir), orders, id)
 	for {
 		select {
 		case <-Door_timer.C: // door is closing
@@ -167,7 +173,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, or
 		case a := <-drv_buttons:
 			fmt.Printf("%+v\n", a)
 			fmt.Printf("we got to before message was sent at least")
-			order_chan <- (a.Floor*3 + int(a.Button))
+			order_chan <- Order{a, id}
 			fmt.Printf("we sent message")
 			io.SetButtonLamp(a.Button, a.Floor, true)
 			orders[(a.Floor)*3+int(a.Button)] = true
@@ -227,7 +233,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, or
 
 		}
 
-		sendState(state_chan, curr_floor, int(curr_dir), orders)
+		sendState(state_chan, curr_floor, int(curr_dir), orders, id)
 
 	}
 }

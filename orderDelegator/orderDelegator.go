@@ -47,7 +47,7 @@ func cost(order fsm.Order, state fsm.State, numFloors int) int {
 	return num_orders + dist_cost + dir_cost
 }
 
-func OrderDelegator(order_chan chan fsm.Order, state_chan chan fsm.State, numFloors int, numElev int) {
+func OrderDelegator(order_chan chan fsm.Order, state_chan chan fsm.State, numFloors int, numElev int, timer_chan chan int) {
 	//go testOrder(order_chan)
 	//go testState(state_chan)
 	/*states := make([]fsm.State, numElev)
@@ -98,6 +98,7 @@ func OrderDelegator(order_chan chan fsm.Order, state_chan chan fsm.State, numFlo
 				}
 				//send order to correct elev
 				fmt.Printf("\nGive order to id: %d \n", min_id)
+				timer_chan <- a.Id
 			}
 		}
 	}

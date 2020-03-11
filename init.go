@@ -4,6 +4,8 @@ import (
 	"./fsm"
 	"./io"
 	"./orderDelegator"
+
+  "./timer"
 )
 
 func main() {
@@ -17,10 +19,15 @@ func main() {
 	order_chan := make(chan fsm.Order)
 	state_chan := make(chan fsm.State)
 
+  timer_chan := make(chan int)
+
 	go io.Io(drv_buttons, drv_floors)
 
 	go fsm.Fsm(drv_buttons, drv_floors, numFloors, order_chan, state_chan, 1)
-	go orderDelegator.OrderDelegator(order_chan, state_chan, numFloors, numElev)
+	go orderDelegator.OrderDelegator(order_chan, state_chan, numFloors, numElev, timer_chan)
+
+  go timer.Timer_organizer(timer_chan)
+  go timer.Timer()
 	for {
 	}
 

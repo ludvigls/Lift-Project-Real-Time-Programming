@@ -1,29 +1,11 @@
 package main
 
 import (
-	"fmt"
-
 	"./fsm"
 	"./io"
 	"./orderDelegator"
 )
 
-func testOrder(order_chan chan int) {
-	for {
-		select {
-		case a := <-order_chan:
-			fmt.Printf("\nWE GOT ORDER %d on CHAN\n", a)
-		}
-	}
-}
-func testState(state_chan chan fsm.State) {
-	for {
-		select {
-		case <-state_chan:
-			fmt.Printf("\nWE GOT STATEEEEEEEEEEEEEEEEEEEEEEEEEE %d on CHAN\n")
-		}
-	}
-}
 func main() {
 
 	numFloors := 4

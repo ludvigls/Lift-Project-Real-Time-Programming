@@ -106,7 +106,6 @@ func takeAnyOrder(curr_floor int, numFloors int, orders []bool) io.MotorDirectio
 			}
 		}
 	}
-	fmt.Printf("couldnt find any orders \n")
 	return io.MD_Stop
 }
 
@@ -153,14 +152,12 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, or
 	for {
 		select {
 		case <-Door_timer.C: // door is closing
-			fmt.Printf("door closing \n")
 			io.SetDoorOpenLamp(false)
 			if orderInFloor(curr_floor, orders) {
 				removeOrdersInFloor(curr_floor, orders)
 				Door_timer = time.NewTimer(3 * time.Second)
 				io.SetDoorOpenLamp(true)
 				curr_state = 0 // go to door open state
-				fmt.Printf("keep door open")
 			} else if hasOrder(orders) {
 				curr_state = 1 //running
 				d = whereToGo(curr_floor, curr_dir, numFloors, orders)
@@ -171,10 +168,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, or
 			} //idle
 
 		case a := <-drv_buttons:
-			fmt.Printf("%+v\n", a)
-			fmt.Printf("we got to before message was sent at least")
 			order_chan <- Order{a, id}
-			fmt.Printf("we sent message")
 			io.SetButtonLamp(a.Button, a.Floor, true)
 			orders[(a.Floor)*3+int(a.Button)] = true
 			fmt.Println(orders)
@@ -188,7 +182,6 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, or
 				d = io.MD_Stop
 				io.SetMotorDirection(d)
 				curr_state = 0 //door_open
-				fmt.Printf("STOPPING \n")
 			} else if a == 0 || a == numFloors-1 { // dont stop for order AND in top/bot floor
 				curr_state = 2 //idle
 			}
@@ -205,7 +198,6 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, or
 
 		switch curr_state {
 		case 0: //door open
-			fmt.Printf("door open \n")
 			removeOrdersInFloor(curr_floor, orders)
 
 			Door_timer = time.NewTimer(3 * time.Second)
@@ -223,10 +215,8 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, or
 				Door_timer = time.NewTimer(3 * time.Second)
 				io.SetDoorOpenLamp(true)
 				removeOrdersInFloor(curr_floor, orders)
-				fmt.Printf("received order")
 				curr_state = 0 //door open
 			} else if d != io.MD_Stop {
-				fmt.Printf("Setting direction")
 				curr_dir = d
 				curr_state = 1 //running
 			}

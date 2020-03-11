@@ -6,6 +6,9 @@ import (
 	"strconv"
 	"time"
 
+	"./fsm"
+	"./io"
+
 	"./network/bcast"
 	"./network/peers"
 )
@@ -37,7 +40,7 @@ func isMaster(PeersList []string, ID int) bool {
 	for i := 0; i < len(PeersList); i++ {
 		peerID, _ := strconv.Atoi(PeersList[i])
 		if peerID < ID {
-			return false 
+			return false
 		}
 	}
 	return true
@@ -48,6 +51,10 @@ func main() { // `go run network_node.go -id=our_id`
 	var count_glob int
 	var PeerList []string
 	var hasBeenMaster bool
+	states := make(map[int]fsm.State) //maybe remove idk
+	numFloors := 4
+	//numElev := 2
+	io.Init("localhost:15657", numFloors)
 
 	flag.StringVar(&id, "id", "", "id of this peer")
 	flag.Parse()
@@ -69,6 +76,9 @@ func main() { // `go run network_node.go -id=our_id`
 	globStateTx := make(chan GlobStateMsg)
 	globStateRx := make(chan GlobStateMsg)
 
+	localStateTx := make(chan fsm.State)
+	localStateRx := make(chan fsm.State)
+
 	countCh := make(chan int)
 	idCh := make(chan string)
 
@@ -80,23 +90,35 @@ func main() { // `go run network_node.go -id=our_id`
 	//Every node initialized as pure recievers
 	go peers.Receiver(15647, peerUpdateCh)
 	go bcast.Receiver(16569, globStateRx)
+	go bcast.Receiver(16570, localStateRx)
+
 	if id != "-1" { //Nodes with IDs are allowed to transmit
 		fmt.Println("Starting transmitting from ID: ", id)
 		go peers.Transmitter(15647, id, peerTxEnable)
 		go bcast.Transmitter(16569, globStateTx)
+		go bcast.Transmitter(16570, localStateTx)
 	}
+
+	// GO ROUTINES EVERYONE WILL RUN v
+	drv_buttons := make(chan io.ButtonEvent)
+	drv_floors := make(chan int)
+	order_chan := make(chan fsm.Order)
+	state_chan := make(chan fsm.State)
+	go io.Io(drv_buttons, drv_floors)
+	go fsm.Fsm(drv_buttons, drv_floors, numFloors, order_chan, state_chan, 1)
+	//go orderDelegator.OrderDelegator(order_chan, state_chan, numFloors, numElev)
 
 	//Everyone sends out its global state (alive message)
 	go func(idCh chan string) {
 		GlobStateMsg := GlobStateMsg{"I'm sending the global state of all lifts", id, 0}
 		for {
 			select {
-				case a := <-idCh: //Needed when node is initialized without id
-					GlobStateMsg.ID = a
-				default:
-					GlobStateMsg.Iter = count_glob //Everyone sends the global state in its alive message
-					globStateTx <- GlobStateMsg
-					time.Sleep(100 * time.Millisecond)
+			case a := <-idCh: //Needed when node is initialized without id
+				GlobStateMsg.ID = a
+			default:
+				GlobStateMsg.Iter = count_glob //Everyone sends the global state in its alive message
+				globStateTx <- GlobStateMsg
+				time.Sleep(100 * time.Millisecond)
 			}
 		}
 	}(idCh)
@@ -142,6 +164,7 @@ func main() { // `go run network_node.go -id=our_id`
 				fmt.Println("Transmitting with ID: ", id_int)
 				go peers.Transmitter(15647, id, peerTxEnable)
 				go bcast.Transmitter(16569, globStateTx)
+				go bcast.Transmitter(16570, localStateTx)
 				idCh <- id
 			}
 
@@ -150,19 +173,39 @@ func main() { // `go run network_node.go -id=our_id`
 				//fmt.Printf("I am primary and count from:  %d \n", count_glob)
 				if !hasBeenMaster {
 					go counter(countCh, count_glob)
+
 					//Order deligator
 					//take in local msg --> one global msg
 					hasBeenMaster = true
 				}
 			}
 		case a := <-globStateRx:
+			//fmt.Println("from: ", a.ID)
 			id_i, _ := strconv.Atoi(a.ID)
 			if isMaster(PeerList, id_i) {
 				count_glob = a.Iter // Every nodes backups masters state
 			}
+		case a := <-localStateRx:
+			fmt.Println("I RECIEVD SHIT ON UDP")
+			if isMaster(PeerList, id_int) {
+				//fmt.Println("from: ", a.Id)
+				//fmt.Println("floor: ", a.Floor)
+				states[a.Id] = a
+				fmt.Println(states)
+			}
+
 		case a := <-countCh: // LOCAL message only heard on local computer
 			count_glob = a
-			fmt.Printf("Primary counting: %d \n", count_glob) // Counting only happening from master
+			//fmt.Printf("Primary counting: %d \n", count_glob) // Counting only happening from master
+		case a := <-state_chan:
+			fmt.Println("Sending my state now")
+			localStateTx <- a
+			fmt.Println("Elevator now at floor", a.Floor)
+			//send state to master
+		case a := <-order_chan:
+			fmt.Println("Incoming order at floor", a.Location.Floor)
+			//send order to master
 		}
+		//add case for incoming message from master with new orders, send to fsm
 	}
 }

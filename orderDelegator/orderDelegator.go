@@ -77,11 +77,11 @@ func OrderDelegator(order_chan chan fsm.Order, state_chan chan fsm.State, numFlo
 		select {
 		case a := <-state_chan:
 			//fmt.Printf("\nIn floor %d\n", a.Floor)
-			states = a
+			states[a.Id] = a
 
 		case a := <-order_chan:
 			//fmt.Printf("Order in floor %d", a.Location.Floor) /
-			if a.Location.Button == io.BT_Cab { //cab orders should always be taken at the same elevator
+			if a.Location.Button == io.BT_Cab { //cab orders should always be taken at the
 				fmt.Printf("\nGive order to id: %d \n", a.Id)
 			} else {
 				costs := make(map[int]int)

@@ -47,7 +47,7 @@ func cost(order fsm.Order, state fsm.State, numFloors int) int {
 	return num_orders + dist_cost + dir_cost
 }
 
-func OrderDelegator(order_chan chan fsm.Order, state_chan chan fsm.State, numFloors int, numElev int) {
+func OrderDelegator(order_chan chan fsm.Order, states_chan chan map[int]fsm.State, numFloors int, numElev int) {
 	//go testOrder(order_chan)
 	//go testState(state_chan)
 	/*states := make([]fsm.State, numElev)
@@ -63,21 +63,22 @@ func OrderDelegator(order_chan chan fsm.Order, state_chan chan fsm.State, numFlo
 
 	states := make(map[int]fsm.State)
 
-	orders := make([]bool, numFloors*3) //inits as false :D
+	//orders := make([]bool, numFloors*3) //inits as false :D
 	//orders[4] = true
 	//orders[5] = true
-	var state fsm.State
-	state.Exe_orders = orders //only for testing
-	state.Floor = 0
-	state.Dir = 0
-	state.Id = 2
-	states[state.Id] = state
-
+	/*
+		var state fsm.State
+		state.Exe_orders = orders //only for testing
+		state.Floor = 0
+		state.Dir = 0
+		state.Id = 2
+		states[state.Id] = state
+	*/
 	for {
 		select {
-		case a := <-state_chan:
+		case a := <-states_chan:
 			//fmt.Printf("\nIn floor %d\n", a.Floor)
-			states[a.Id] = a
+			states = a
 
 		case a := <-order_chan:
 			//fmt.Printf("Order in floor %d", a.Location.Floor) /

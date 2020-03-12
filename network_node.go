@@ -16,7 +16,7 @@ import (
 // We define some custom struct to send over the network.
 // Note that all members we want to transmit must be public. Any private members
 //  will be received as zero-values.
-type GlobStateMsg struct {
+type CountMsg struct {
 	Message string
 	ID      string // TO ID
 	Iter    int
@@ -51,7 +51,7 @@ func main() { // `go run network_node.go -id=our_id`
 	var count_glob int
 	var PeerList []string
 	var hasBeenMaster bool
-	states := make(map[int]fsm.State) //maybe remove idk
+	globState := make(map[int]fsm.State) //maybe remove idk
 	numFloors := 4
 	//numElev := 2
 	io.Init("localhost:15657", numFloors)
@@ -73,8 +73,8 @@ func main() { // `go run network_node.go -id=our_id`
 	peerTxEnable := make(chan bool)
 
 	// We make channels for sending and receiving our custom data types
-	globStateTx := make(chan GlobStateMsg)
-	globStateRx := make(chan GlobStateMsg)
+	countTx := make(chan CountMsg)
+	countRx := make(chan CountMsg)
 
 	localStateTx := make(chan fsm.State)
 	localStateRx := make(chan fsm.State)
@@ -89,13 +89,13 @@ func main() { // `go run network_node.go -id=our_id`
 
 	//Every node initialized as pure recievers
 	go peers.Receiver(15647, peerUpdateCh)
-	go bcast.Receiver(16569, globStateRx)
+	go bcast.Receiver(16569, countRx)
 	go bcast.Receiver(16570, localStateRx)
 
 	if id != "-1" { //Nodes with IDs are allowed to transmit
 		fmt.Println("Starting transmitting from ID: ", id)
 		go peers.Transmitter(15647, id, peerTxEnable)
-		go bcast.Transmitter(16569, globStateTx)
+		go bcast.Transmitter(16569, countTx)
 		go bcast.Transmitter(16570, localStateTx)
 	}
 
@@ -103,26 +103,36 @@ func main() { // `go run network_node.go -id=our_id`
 	drv_buttons := make(chan io.ButtonEvent)
 	drv_floors := make(chan int)
 	order_chan := make(chan fsm.Order)
-	state_chan := make(chan fsm.State)
+	globstate_chan := make(chan map[int]fsm.State)
+	localstate_chan := make(chan fsm.State)
 	go io.Io(drv_buttons, drv_floors)
-	go fsm.Fsm(drv_buttons, drv_floors, numFloors, order_chan, state_chan, 1)
+	go fsm.Fsm(drv_buttons, drv_floors, numFloors, order_chan, localstate_chan, 1)
 	//go orderDelegator.OrderDelegator(order_chan, state_chan, numFloors, numElev)
 
-	//Everyone sends out its global state (alive message)
+	//Everyone sends out its count msg
 	go func(idCh chan string) {
-		GlobStateMsg := GlobStateMsg{"I'm sending the global state of all lifts", id, 0}
+		CountMsg := CountMsg{"I'm sending the global state of all lifts", id, 0}
 		for {
 			select {
 			case a := <-idCh: //Needed when node is initialized without id
-				GlobStateMsg.ID = a
+				CountMsg.ID = a
 			default:
-				GlobStateMsg.Iter = count_glob //Everyone sends the global state in its alive message
-				globStateTx <- GlobStateMsg
+				CountMsg.Iter = count_glob //Everyone sends the global state in its alive message
+				countTx <- CountMsg
 				time.Sleep(100 * time.Millisecond)
 			}
 		}
 	}(idCh)
 
+	go func() {
+		for {
+			select {
+			case a := <-globstate_chan:
+				//NB, master now sends out glob state to port and saves same glob state from port
+				globState = a
+			}
+		}
+	}()
 	for {
 		select {
 		case p := <-peerUpdateCh:
@@ -163,7 +173,7 @@ func main() { // `go run network_node.go -id=our_id`
 				//Initialize transmit features for node
 				fmt.Println("Transmitting with ID: ", id_int)
 				go peers.Transmitter(15647, id, peerTxEnable)
-				go bcast.Transmitter(16569, globStateTx)
+				go bcast.Transmitter(16569, countTx)
 				go bcast.Transmitter(16570, localStateTx)
 				idCh <- id
 			}
@@ -179,25 +189,27 @@ func main() { // `go run network_node.go -id=our_id`
 					hasBeenMaster = true
 				}
 			}
-		case a := <-globStateRx:
+		case a := <-countRx:
 			//fmt.Println("from: ", a.ID)
 			id_i, _ := strconv.Atoi(a.ID)
 			if isMaster(PeerList, id_i) {
 				count_glob = a.Iter // Every nodes backups masters state
 			}
 		case a := <-localStateRx:
-			fmt.Println("I RECIEVD SHIT ON UDP")
+			//fmt.Println("I RECIEVD SHIT ON UDP")
 			if isMaster(PeerList, id_int) {
 				//fmt.Println("from: ", a.Id)
 				//fmt.Println("floor: ", a.Floor)
-				states[a.Id] = a
-				fmt.Println(states)
+				globState[a.Id] = a
+				fmt.Println(globState)
+				//send to orderdelegator
+				globstate_chan <- globState
 			}
 
 		case a := <-countCh: // LOCAL message only heard on local computer
 			count_glob = a
-			//fmt.Printf("Primary counting: %d \n", count_glob) // Counting only happening from master
-		case a := <-state_chan:
+			fmt.Printf("Primary counting: %d \n", count_glob) // Counting only happening from master
+		case a := <-localstate_chan:
 			fmt.Println("Sending my state now")
 			localStateTx <- a
 			fmt.Println("Elevator now at floor", a.Floor)
@@ -205,6 +217,7 @@ func main() { // `go run network_node.go -id=our_id`
 		case a := <-order_chan:
 			fmt.Println("Incoming order at floor", a.Location.Floor)
 			//send order to master
+
 		}
 		//add case for incoming message from master with new orders, send to fsm
 	}

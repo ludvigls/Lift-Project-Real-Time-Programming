@@ -29,9 +29,9 @@ const (
 	idle      int = 2
 )
 
-func sendState(state_chan chan State, floor int, dir int, orders []bool, id int) {
+func sendState(localstate_chan chan State, floor int, dir int, orders []bool, id int) {
 	state := State{orders, floor, dir, id}
-	state_chan <- state
+	localstate_chan <- state
 	return
 }
 func hasOrder(orders []bool) bool {
@@ -133,11 +133,12 @@ func whereToGo(curr_floor int, curr_dir io.MotorDirection, numFloors int, orders
 	return takeAnyOrder(curr_floor, numFloors, orders)
 }
 
-func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, order_chan chan Order, state_chan chan State, id int) {
+func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, order_chan chan Order, localstate_chan chan State, id int) {
 	Door_timer := time.NewTimer(120 * time.Second) //init door timer
 	//var orders [numFloors * 3]bool                 // [. . .   . . .   . . .   . . . ] (3 x 1.etj, 3 x 2.etj ....)
 	orders := make([]bool, numFloors*3)
 	//INIT PHASE
+	fmt.Println("STARTED FSM")
 
 	var d io.MotorDirection = io.MD_Up
 	curr_dir := io.MD_Up
@@ -148,7 +149,8 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, or
 	io.SetMotorDirection(d)
 	var curr_state state
 	curr_state = 2 //idle
-	sendState(state_chan, curr_floor, int(curr_dir), orders, id)
+	sendState(localstate_chan, curr_floor, int(curr_dir), orders, id)
+
 	for {
 		select {
 		case <-Door_timer.C: // door is closing
@@ -223,7 +225,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, or
 
 		}
 
-		sendState(state_chan, curr_floor, int(curr_dir), orders, id)
+		sendState(localstate_chan, curr_floor, int(curr_dir), orders, id)
 
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"math"
 
 	"../fsm"
-	"../io"
 )
 
 func testOrder(order_chan chan int) {
@@ -47,7 +46,7 @@ func cost(order fsm.Order, state fsm.State, numFloors int) int {
 	return num_orders + dist_cost + dir_cost
 }
 
-func OrderDelegator(order_chan chan fsm.Order, states_chan chan map[int]fsm.State, numFloors int, numElev int) {
+func OrderDelegator(order_chan chan fsm.Order, states_chan chan map[int]fsm.State, numFloors int) {
 	//go testOrder(order_chan)
 	//go testState(state_chan)
 	/*states := make([]fsm.State, numElev)
@@ -79,8 +78,10 @@ func OrderDelegator(order_chan chan fsm.Order, states_chan chan map[int]fsm.Stat
 		case a := <-states_chan:
 			//fmt.Printf("\nIn floor %d\n", a.Floor)
 			states = a
+			fmt.Println("We got the fuckin states")
+			fmt.Println(states)
 
-		case a := <-order_chan:
+			/*case a := <-order_chan:
 			//fmt.Printf("Order in floor %d", a.Location.Floor) /
 			if a.Location.Button == io.BT_Cab { //cab orders should always be taken at the
 				fmt.Printf("\nGive order to id: %d \n", a.Id)
@@ -100,6 +101,7 @@ func OrderDelegator(order_chan chan fsm.Order, states_chan chan map[int]fsm.Stat
 				//send order to correct elev
 				fmt.Printf("\nGive order to id: %d \n", min_id)
 			}
+			*/
 		}
 	}
 }

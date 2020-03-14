@@ -8,6 +8,7 @@ import (
 
 	"./fsm"
 	"./io"
+	"./orderDelegator"
 
 	"./network/bcast"
 	"./network/peers"
@@ -104,6 +105,8 @@ func main() { // `go run network_node.go -id=our_id`
 	drv_floors := make(chan int)
 	order_chan := make(chan fsm.Order)
 	globstate_chan := make(chan map[int]fsm.State)
+	globstate_chanRXTX := make(chan map[int]fsm.State) //make this udp
+
 	localstate_chan := make(chan fsm.State)
 	go io.Io(drv_buttons, drv_floors)
 	go fsm.Fsm(drv_buttons, drv_floors, numFloors, order_chan, localstate_chan, 1)
@@ -127,7 +130,7 @@ func main() { // `go run network_node.go -id=our_id`
 	go func() {
 		for {
 			select {
-			case a := <-globstate_chan:
+			case a := <-globstate_chanRXTX:
 				//NB, master now sends out glob state to port and saves same glob state from port
 				globState = a
 			}
@@ -184,7 +187,7 @@ func main() { // `go run network_node.go -id=our_id`
 				if !hasBeenMaster {
 					go counter(countCh, count_glob)
 
-					//Order deligator
+					go orderDelegator.OrderDelegator(order_chan, globstate_chan, numFloors)
 					//take in local msg --> one global msg
 					hasBeenMaster = true
 				}
@@ -204,6 +207,7 @@ func main() { // `go run network_node.go -id=our_id`
 				fmt.Println(globState)
 				//send to orderdelegator
 				globstate_chan <- globState
+				globstate_chanRXTX <- globState
 			}
 
 		case a := <-countCh: // LOCAL message only heard on local computer
@@ -211,7 +215,10 @@ func main() { // `go run network_node.go -id=our_id`
 			fmt.Printf("Primary counting: %d \n", count_glob) // Counting only happening from master
 		case a := <-localstate_chan:
 			fmt.Println("Sending my state now")
+			globState[a.Id] = a
+			globstate_chan <- globState
 			localStateTx <- a
+
 			fmt.Println("Elevator now at floor", a.Floor)
 			//send state to master
 		case a := <-order_chan:

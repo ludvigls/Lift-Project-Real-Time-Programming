@@ -19,13 +19,18 @@ type GlobStateMsg struct {
 	Iter    int
 }
 
-func counter(countCh chan<- int, startFrom int) {
-	// Will be replaced with a spam orders --> glob order converter
+func counter(countCh chan<- int, startFrom int, stopCountCh <-chan bool) {
+	// Will be replaced with master only functionality
 	count := startFrom
 	for {
-		count++
-		countCh <- count
-		time.Sleep(1 * time.Second)
+		select {
+		case <-stopCountCh:
+			return
+		default:
+			count++
+			countCh <- count
+			time.Sleep(1 * time.Second)
+		}
 	}
 }
 
@@ -37,7 +42,7 @@ func isMaster(PeersList []string, ID int) bool {
 	for i := 0; i < len(PeersList); i++ {
 		peerID, _ := strconv.Atoi(PeersList[i])
 		if peerID < ID {
-			return false 
+			return false
 		}
 	}
 	return true
@@ -47,7 +52,8 @@ func main() { // `go run network_node.go -id=our_id`
 	var id string
 	var count_glob int
 	var PeerList []string
-	var hasBeenMaster bool
+	var isAllreadyMaster bool
+	// connection_lost := false
 
 	flag.StringVar(&id, "id", "", "id of this peer")
 	flag.Parse()
@@ -70,6 +76,7 @@ func main() { // `go run network_node.go -id=our_id`
 	globStateRx := make(chan GlobStateMsg)
 
 	countCh := make(chan int)
+	stopCountCh := make(chan bool)
 	idCh := make(chan string)
 
 	// ... and start the transmitter/receiver pair on some port
@@ -91,12 +98,12 @@ func main() { // `go run network_node.go -id=our_id`
 		GlobStateMsg := GlobStateMsg{"I'm sending the global state of all lifts", id, 0}
 		for {
 			select {
-				case a := <-idCh: //Needed when node is initialized without id
-					GlobStateMsg.ID = a
-				default:
-					GlobStateMsg.Iter = count_glob //Everyone sends the global state in its alive message
-					globStateTx <- GlobStateMsg
-					time.Sleep(100 * time.Millisecond)
+			case a := <-idCh: //Needed when node is initialized without id
+				GlobStateMsg.ID = a
+			default:
+				GlobStateMsg.Iter = count_glob //Everyone sends the global state in its alive message
+				globStateTx <- GlobStateMsg
+				time.Sleep(100 * time.Millisecond)
 			}
 		}
 	}(idCh)
@@ -111,9 +118,24 @@ func main() { // `go run network_node.go -id=our_id`
 
 			PeerList = p.Peers
 
+			fmt.Println("Checking connction...")
+
+			// if len(PeerList) == 0 {
+			// 	connection_lost = true
+			// 	fmt.Println("CONNECTION LOST")
+			// }
+			//else {
+			//	connection_lost = false
+			//}
+
+			// if connection_lost && len(PeerList) > 0 {
+			// 	connection_lost = false
+			// 	fmt.Println("CONNECTION REGAINED")
+			// 	// should kill all goroutines that master uses
+			// }
+
 			// Initialize ID
 			if id == "-1" {
-
 				//Empty recieve queue (get last msg)
 				time_out := false
 				timer := time.NewTimer(100 * time.Millisecond) //uses Xms to get latest message
@@ -146,15 +168,31 @@ func main() { // `go run network_node.go -id=our_id`
 			}
 
 			// Should I become master?
-			if isMaster(PeerList, id_int) {
-				//fmt.Printf("I am primary and count from:  %d \n", count_glob)
-				if !hasBeenMaster {
-					go counter(countCh, count_glob)
-					//Order deligator
-					//take in local msg --> one global msg
-					hasBeenMaster = true
-				}
+			if isMaster(PeerList, id_int) && !isAllreadyMaster {
+				//ininitializeitialize go routines for master functinality
+				go counter(countCh, count_glob, stopCountCh)
+				//Order deligator
+				isAllreadyMaster = true
+			} else if isAllreadyMaster && !isMaster(PeerList, id_int) {
+				fmt.Println("SHOULD STOP DOING MASTER FUNCTIONALITY")
+				stopCountCh <- true
+				isAllreadyMaster = false
 			}
+
+			// if isMaster(PeerList, id_int) {
+			// 	//fmt.Printf("I am primary and count from:  %d \n", count_glob)
+			// 	if !isAllreadyMaster {
+			// 		go counter(countCh, count_glob, stopCountCh)
+			// 		//Order deligator
+			// 		//take in local msg --> one global msg
+			// 		isAllreadyMaster = true
+			// 	}
+			// } else if isAllreadyMaster { // but is no longer master
+			// 	fmt.Println("SHOULD STOP DOING MASTER FUNCTIONALITY")
+			// 	//Stop doing master functionality
+			// 	isAllreadyMaster = false
+			// 	fmt.Println("SHOULD STOP DOING MASTER FUNCTIONALITY")
+			// }
 		case a := <-globStateRx:
 			id_i, _ := strconv.Atoi(a.ID)
 			if isMaster(PeerList, id_i) {

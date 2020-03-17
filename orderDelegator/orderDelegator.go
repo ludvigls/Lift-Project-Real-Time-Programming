@@ -78,7 +78,7 @@ func OrderDelegator(order_chan chan fsm.Order, states_chan chan map[int]fsm.Stat
 		case a := <-states_chan:
 			//fmt.Printf("\nIn floor %d\n", a.Floor)
 			states = a
-			fmt.Println("We got the fuckin states")
+			fmt.Println("Order del got states")
 			fmt.Println(states)
 
 			/*case a := <-order_chan:

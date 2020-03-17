@@ -91,6 +91,18 @@ func main() { // `go run network_node.go -id=our_id`
 	//  start multiple transmitters/receivers on the same port.
 	// A transmitter and receiver transmitting and recieving to the same port
 
+	// GO ROUTINES EVERYONE WILL RUN v
+	drv_buttons := make(chan io.ButtonEvent)
+	drv_floors := make(chan int)
+	order_chan := make(chan fsm.Order)
+	globstate_chan := make(chan map[int]fsm.State)
+	globstate_chanRXTX := make(chan map[int]fsm.State) //make this udp
+
+	localstate_chan := make(chan fsm.State)
+	go io.Io(drv_buttons, drv_floors)
+	//go fsm.Fsm(drv_buttons, drv_floors, numFloors, order_chan, localstate_chan, id_int)
+	//go orderDelegator.OrderDelegator(order_chan, state_chan, numFloors, numElev)
+
 	//Every node initialized as pure recievers
 	go peers.Receiver(15647, peerUpdateCh)
 	go bcast.Receiver(16569, countRx)
@@ -101,19 +113,11 @@ func main() { // `go run network_node.go -id=our_id`
 		go peers.Transmitter(15647, id, peerTxEnable)
 		go bcast.Transmitter(16569, countTx)
 		go bcast.Transmitter(16570, localStateTx)
+
+		go fsm.Fsm(drv_buttons, drv_floors, numFloors, order_chan, localstate_chan, id_int)
+		go orderDelegator.OrderDelegator(order_chan, globstate_chan, numFloors)
+
 	}
-
-	// GO ROUTINES EVERYONE WILL RUN v
-	drv_buttons := make(chan io.ButtonEvent)
-	drv_floors := make(chan int)
-	order_chan := make(chan fsm.Order)
-	globstate_chan := make(chan map[int]fsm.State)
-	globstate_chanRXTX := make(chan map[int]fsm.State) //make this udp
-
-	localstate_chan := make(chan fsm.State)
-	go io.Io(drv_buttons, drv_floors)
-	go fsm.Fsm(drv_buttons, drv_floors, numFloors, order_chan, localstate_chan, 1)
-	//go orderDelegator.OrderDelegator(order_chan, state_chan, numFloors, numElev)
 
 	//Everyone sends out its count msg
 	go func(idCh chan string) {
@@ -151,7 +155,6 @@ func main() { // `go run network_node.go -id=our_id`
 
 			// Initialize ID
 			if id == "-1" {
-
 				//Empty recieve queue (get last msg)
 				time_out := false
 				timer := time.NewTimer(100 * time.Millisecond) //uses Xms to get latest message
@@ -181,6 +184,10 @@ func main() { // `go run network_node.go -id=our_id`
 				go peers.Transmitter(15647, id, peerTxEnable)
 				go bcast.Transmitter(16569, countTx)
 				go bcast.Transmitter(16570, localStateTx)
+
+				go fsm.Fsm(drv_buttons, drv_floors, numFloors, order_chan, localstate_chan, id_int)
+				go orderDelegator.OrderDelegator(order_chan, globstate_chan, numFloors)
+
 				idCh <- id
 			}
 
@@ -190,7 +197,7 @@ func main() { // `go run network_node.go -id=our_id`
 				if !hasBeenMaster {
 					go counter(countCh, count_glob)
 
-					go orderDelegator.OrderDelegator(order_chan, globstate_chan, numFloors)
+					//go orderDelegator.OrderDelegator(order_chan, globstate_chan, numFloors)
 					//take in local msg --> one global msg
 					hasBeenMaster = true
 				}

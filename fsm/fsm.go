@@ -184,7 +184,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 
 		case a := <-drv_floors:
 			curr_floor = a
-			//io.SetFloorIndicator(curr_floor)
+			io.SetFloorIndicator(curr_floor)
 
 			if stopForOrder(curr_floor, curr_dir, numFloors, orders) {
 				removeOrdersInFloor(curr_floor, orders)

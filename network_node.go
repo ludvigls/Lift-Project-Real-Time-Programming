@@ -91,18 +91,6 @@ func main() { // `go run network_node.go -id=our_id`
 	//  start multiple transmitters/receivers on the same port.
 	// A transmitter and receiver transmitting and recieving to the same port
 
-	//Every node initialized as pure recievers
-	go peers.Receiver(15647, peerUpdateCh)
-	go bcast.Receiver(16569, countRx)
-	go bcast.Receiver(16570, localStateRx)
-
-	if id != "-1" { //Nodes with IDs are allowed to transmit
-		//fmt.Println("Starting transmitting from ID: ", id)
-		go peers.Transmitter(15647, id, peerTxEnable)
-		go bcast.Transmitter(16569, countTx)
-		go bcast.Transmitter(16570, localStateTx)
-	}
-
 	// GO ROUTINES EVERYONE WILL RUN v
 	drv_buttons := make(chan io.ButtonEvent)
 	drv_floors := make(chan int)
@@ -114,8 +102,25 @@ func main() { // `go run network_node.go -id=our_id`
 	globstate_chanRXTX := make(chan map[int]fsm.State) //make this udp
 
 	localstate_chan := make(chan fsm.State)
+
+	//Every node initialized as pure recievers
+	go peers.Receiver(15647, peerUpdateCh)
+	go bcast.Receiver(16569, countRx)
+	go bcast.Receiver(16570, localStateRx)
+
+	if id != "-1" { //Nodes with IDs are allowed to transmit
+		//fmt.Println("Starting transmitting from ID: ", id)
+		go peers.Transmitter(15647, id, peerTxEnable)
+		go bcast.Transmitter(16569, countTx)
+		go bcast.Transmitter(16570, localStateTx)
+
+		go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, localstate_chan, id_int)
+
+	}
+
 	go io.Io(drv_buttons, drv_floors)
-	go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, localstate_chan, 1)
+	//go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, localstate_chan, id_int)
+	go orderDelegator.OrderDelegator(n_od_order_chan, od_n_order_chan, globstate_chan, numFloors)
 	//go orderDelegator.OrderDelegator(order_chan, state_chan, numFloors, numElev)
 
 	//Everyone sends out its count msg
@@ -191,6 +196,9 @@ func main() { // `go run network_node.go -id=our_id`
 				go peers.Transmitter(15647, id, peerTxEnable)
 				go bcast.Transmitter(16569, countTx)
 				go bcast.Transmitter(16570, localStateTx)
+
+				go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, localstate_chan, id_int)
+
 				idCh <- id
 			}
 
@@ -199,8 +207,7 @@ func main() { // `go run network_node.go -id=our_id`
 				//fmt.Printf("I am primary and count from:  %d \n", count_glob)
 				if !hasBeenMaster {
 					go counter(countCh, count_glob)
-
-					go orderDelegator.OrderDelegator(n_od_order_chan, od_n_order_chan, globstate_chan, numFloors)
+					//go orderDelegator.OrderDelegator(n_od_order_chan, od_n_order_chan, globstate_chan, numFloors)
 					//take in local msg --> one global msg
 					hasBeenMaster = true
 				}
@@ -240,10 +247,10 @@ func main() { // `go run network_node.go -id=our_id`
 			//send order to master
 
 		case a := <-od_n_order_chan:
-			//fmt.Println("GOT AN ASSIGNED ORDER!! NETWORK", a.Location.Floor)
-			//enten send til din egen node
-			if a.Id == id_int {
-				n_fsm_order_chan <- a
+			if isMaster(PeerList, id_int) {
+				if a.Id == id_int {
+					n_fsm_order_chan <- a
+				}
 			}
 			// eller send ut på nettet
 			//fmt.Println("SENT AN ASSIGNED ORDER!! NETWROK", a.Location.Floor)

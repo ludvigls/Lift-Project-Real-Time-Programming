@@ -178,7 +178,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 
 		case a := <-drv_buttons:
 			fsm_n_order_chan <- Order{a, id}
-			io.SetButtonLamp(a.Button, a.Floor, true)
+			//io.SetButtonLamp(a.Button, a.Floor, true)
 			//orders[(a.Floor)*3+int(a.Button)] = true
 			//fmt.Println(orders)
 

@@ -94,7 +94,7 @@ func main() { // `go run network_node.go -id=our_id`
 	go bcast.Receiver(16570, localStateRx)
 
 	if id != "-1" { //Nodes with IDs are allowed to transmit
-		fmt.Println("Starting transmitting from ID: ", id)
+		//fmt.Println("Starting transmitting from ID: ", id)
 		go peers.Transmitter(15647, id, peerTxEnable)
 		go bcast.Transmitter(16569, countTx)
 		go bcast.Transmitter(16570, localStateTx)
@@ -103,13 +103,16 @@ func main() { // `go run network_node.go -id=our_id`
 	// GO ROUTINES EVERYONE WILL RUN v
 	drv_buttons := make(chan io.ButtonEvent)
 	drv_floors := make(chan int)
-	order_chan := make(chan fsm.Order)
+	fsm_n_order_chan := make(chan fsm.Order)
+	n_od_order_chan := make(chan fsm.Order)
+	od_n_order_chan := make(chan fsm.Order)
+	n_fsm_order_chan := make(chan fsm.Order)
 	globstate_chan := make(chan map[int]fsm.State)
 	globstate_chanRXTX := make(chan map[int]fsm.State) //make this udp
 
 	localstate_chan := make(chan fsm.State)
 	go io.Io(drv_buttons, drv_floors)
-	go fsm.Fsm(drv_buttons, drv_floors, numFloors, order_chan, localstate_chan, 1)
+	go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, localstate_chan, 1)
 	//go orderDelegator.OrderDelegator(order_chan, state_chan, numFloors, numElev)
 
 	//Everyone sends out its count msg
@@ -133,7 +136,14 @@ func main() { // `go run network_node.go -id=our_id`
 			case a := <-globstate_chanRXTX:
 				//NB, master now sends out glob state to port and saves same glob state from port
 				globState = a
+			case a := <-localstate_chan:
+				//fmt.Println("Sending my state now")
+				globState[a.Id] = a
+				globstate_chan <- globState
+				localStateTx <- a
+
 			}
+
 		}
 	}()
 	for {
@@ -187,7 +197,7 @@ func main() { // `go run network_node.go -id=our_id`
 				if !hasBeenMaster {
 					go counter(countCh, count_glob)
 
-					go orderDelegator.OrderDelegator(order_chan, globstate_chan, numFloors)
+					go orderDelegator.OrderDelegator(n_od_order_chan, od_n_order_chan, globstate_chan, numFloors)
 					//take in local msg --> one global msg
 					hasBeenMaster = true
 				}
@@ -204,7 +214,7 @@ func main() { // `go run network_node.go -id=our_id`
 				//fmt.Println("from: ", a.Id)
 				//fmt.Println("floor: ", a.Floor)
 				globState[a.Id] = a
-				fmt.Println(globState)
+				//fmt.Println(globState)
 				//send to orderdelegator
 				globstate_chan <- globState
 				globstate_chanRXTX <- globState
@@ -212,20 +222,31 @@ func main() { // `go run network_node.go -id=our_id`
 
 		case a := <-countCh: // LOCAL message only heard on local computer
 			count_glob = a
-			fmt.Printf("Primary counting: %d \n", count_glob) // Counting only happening from master
-		case a := <-localstate_chan:
-			fmt.Println("Sending my state now")
-			globState[a.Id] = a
-			globstate_chan <- globState
-			localStateTx <- a
-
-			fmt.Println("Elevator now at floor", a.Floor)
-			//send state to master
-		case a := <-order_chan:
-			fmt.Println("Incoming order at floor", a.Location.Floor)
+			//fmt.Printf("Primary counting: %d \n", count_glob) // Counting only happening from master
+		/*case a := <-localstate_chan:
+		fmt.Println("Sending my state now")
+		globState[a.Id] = a
+		globstate_chan <- globState
+		localStateTx <- a
+		*/
+		//fmt.Println("Elevator now at floor", a.Floor)
+		//send state to master
+		case a := <-fsm_n_order_chan:
+			//fmt.Println("Incoming order at floor", a.Location.Floor)
+			n_od_order_chan <- a
 			//send order to master
 
+		case a := <-od_n_order_chan:
+			//fmt.Println("GOT AN ASSIGNED ORDER!! NETWORK", a.Location.Floor)
+			//enten send til din egen node
+			if a.Id == id_int {
+				n_fsm_order_chan <- a
+			}
+			// eller send ut på nettet
+			//fmt.Println("SENT AN ASSIGNED ORDER!! NETWROK", a.Location.Floor)
 		}
-		//add case for incoming message from master with new orders, send to fsm
+		//send order to master
 	}
+	//add case for incoming message from master with new orders, send to fsm
+
 }

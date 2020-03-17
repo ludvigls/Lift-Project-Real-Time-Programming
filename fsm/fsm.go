@@ -31,7 +31,9 @@ const (
 
 func sendState(localstate_chan chan State, floor int, dir int, orders []bool, id int) {
 	state := State{orders, floor, dir, id}
+	//fmt.Println("ALMOST SENT STATE")
 	localstate_chan <- state
+	//fmt.Println("SENT STATE")
 	return
 }
 func hasOrder(orders []bool) bool {
@@ -117,7 +119,7 @@ func whereToGo(curr_floor int, curr_dir io.MotorDirection, numFloors int, orders
 
 		// if order in curr floor wants to go down
 		for f := curr_floor + 1; f < numFloors; f++ { //DONT take the order, if there are other orders in up dir above you / cab orders above
-			if orders[f*3+int(io.BT_HallUp)] || orders[f*3+int(io.BT_Cab)] {
+			if orders[f*3+int(io.BT_HallUp)] || orders[f*3+int(io.BT_Cab)] || orders[f*3+int(io.BT_HallDown)] {
 				return io.MD_Up
 			}
 		}
@@ -125,7 +127,7 @@ func whereToGo(curr_floor int, curr_dir io.MotorDirection, numFloors int, orders
 	} else if curr_dir == io.MD_Down {
 
 		for f := 0; f < curr_floor; f++ {
-			if orders[f*3+int(io.BT_HallUp)] || orders[f*3+int(io.BT_Cab)] {
+			if orders[f*3+int(io.BT_HallUp)] || orders[f*3+int(io.BT_Cab)] || orders[f*3+int(io.BT_HallDown)] {
 				return io.MD_Down
 			}
 		}
@@ -133,7 +135,7 @@ func whereToGo(curr_floor int, curr_dir io.MotorDirection, numFloors int, orders
 	return takeAnyOrder(curr_floor, numFloors, orders)
 }
 
-func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, order_chan chan Order, localstate_chan chan State, id int) {
+func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fsm_n_order_chan chan Order, n_fsm_order_chan chan Order, localstate_chan chan State, id int) {
 	Door_timer := time.NewTimer(120 * time.Second) //init door timer
 	//var orders [numFloors * 3]bool                 // [. . .   . . .   . . .   . . . ] (3 x 1.etj, 3 x 2.etj ....)
 	orders := make([]bool, numFloors*3)
@@ -152,6 +154,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, or
 	sendState(localstate_chan, curr_floor, int(curr_dir), orders, id)
 
 	for {
+		//fmt.Println("New tier while loop")
 		select {
 		case <-Door_timer.C: // door is closing
 			io.SetDoorOpenLamp(false)
@@ -162,22 +165,26 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, or
 				curr_state = 0 // go to door open state
 			} else if hasOrder(orders) {
 				curr_state = 1 //running
+				fmt.Println("My direction was")
+				fmt.Println(curr_dir)
 				d = whereToGo(curr_floor, curr_dir, numFloors, orders)
-				io.SetMotorDirection(d)
+				fmt.Println("I want to go")
+				fmt.Println(d)
 				curr_dir = d
+				io.SetMotorDirection(d)
 			} else {
 				curr_state = 2
 			} //idle
 
 		case a := <-drv_buttons:
-			order_chan <- Order{a, id}
+			fsm_n_order_chan <- Order{a, id}
 			io.SetButtonLamp(a.Button, a.Floor, true)
-			orders[(a.Floor)*3+int(a.Button)] = true
-			fmt.Println(orders)
+			//orders[(a.Floor)*3+int(a.Button)] = true
+			//fmt.Println(orders)
 
 		case a := <-drv_floors:
 			curr_floor = a
-			io.SetFloorIndicator(curr_floor)
+			//io.SetFloorIndicator(curr_floor)
 
 			if stopForOrder(curr_floor, curr_dir, numFloors, orders) {
 				removeOrdersInFloor(curr_floor, orders)
@@ -195,7 +202,10 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, or
 					curr_dir = io.MD_Up
 				}
 			}
-
+		case a := <-n_fsm_order_chan:
+			//fmt.Println("GOT AN ASSIGNED ORDER")
+			orders[a.Location.Floor*3+int(a.Location.Button)] = true
+			io.SetButtonLamp(a.Location.Button, a.Location.Floor, true)
 		}
 
 		switch curr_state {
@@ -205,9 +215,9 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, or
 			Door_timer = time.NewTimer(3 * time.Second)
 			io.SetDoorOpenLamp(true)
 		case 1: //running
-			fmt.Printf("running \n")
+			//fmt.Printf("running \n")
 		case 2: //idle
-			fmt.Printf("idle \n")
+			//fmt.Printf("idle \n")
 			//check for new orders!
 			//d = whereToGo(curr_dir, curr_floor)
 			d = whereToGo(curr_floor, curr_dir, numFloors, orders)

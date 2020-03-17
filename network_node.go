@@ -54,12 +54,15 @@ func main() { // `go run network_node.go -id=our_id`
 	var hasBeenMaster bool
 	globState := make(map[int]fsm.State) //maybe remove idk
 	numFloors := 4
+	lift_port := "15657"
+
 	//numElev := 2
-	io.Init("localhost:15657", numFloors)
 
 	flag.StringVar(&id, "id", "", "id of this peer")
+	flag.StringVar(&lift_port, "lift_port", "", "lift port of my lift")
 	flag.Parse()
 
+	io.Init("localhost:"+lift_port, numFloors)
 	id_int, _ := strconv.Atoi(id)
 
 	if id == "" {

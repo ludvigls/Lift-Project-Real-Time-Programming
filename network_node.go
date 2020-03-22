@@ -16,7 +16,7 @@ import (
 
 type CountMsg struct {
 	Message string
-	ID      string
+	ID      int
 	Iter    int
 }
 
@@ -56,27 +56,28 @@ func initializeID(PeerList []string) int {
 	return highest_id + 1
 }
 
-// func getMostRecentMsg(peerUpdateCh chan peers.PeerUpdate) []string {
-// 	time_out := false
-// 	var PeerList []string
+func getMostRecentMsg(peerUpdateCh chan peers.PeerUpdate, PeerList []string) []string {
+	//TODO : this function was made to prevent some bug
+	//Atm it does nothing, but things still work...
+	time_out := false
 
-// 	timer := time.NewTimer(2000 * time.Millisecond) //emptys the message stack for 100ms
-// 	fmt.Println("WAITING")
-// 	for !time_out {
-// 		select {
-// 		case <-timer.C:
-// 			fmt.Println("TIME OUT!!")
-// 			time_out = true
-// 		case a := <-peerUpdateCh:
-// 			fmt.Println("UPDATING PEERLIST!!") // TODO CODE IS NEVER HERE!!!
-// 			PeerList = a.Peers
-// 		}
-// 	}
-// 	return PeerList
-// }
+	timer := time.NewTimer(200 * time.Millisecond) //emptys the message stack for 100ms
+	//fmt.Println("WAITING")
+	for !time_out {
+		select {
+		case <-timer.C:
+			//fmt.Println("TIME OUT!!")
+			time_out = true
+		case a := <-peerUpdateCh:
+			fmt.Println("THIS FUNCTION HAS A PURPOSE :0 !, UPDATING PEERLIST!!") // TODO CODE IS NEVER HERE!!!
+			PeerList = a.Peers
+		}
+	}
+	return PeerList
+}
 
 func main() { // `go run network_node.go -id=our_id`
-	var id string
+	var id_str string
 	var count_glob int
 	var PeerList []string
 	var hasBeenMaster bool
@@ -84,17 +85,17 @@ func main() { // `go run network_node.go -id=our_id`
 	numFloors := 4
 	lift_port := "15657"
 
-	flag.StringVar(&id, "id", "", "id of this peer")
+	flag.StringVar(&id_str, "id", "", "id of this peer")
 	flag.StringVar(&lift_port, "lift_port", "", "lift port of my lift")
 	flag.Parse()
 
 	io.Init("localhost:"+lift_port, numFloors)
-	id_int, _ := strconv.Atoi(id)
 
-	if id == "" {
-		id = "-1"
-		id_int, _ = strconv.Atoi(id)
+	if id_str == "" {
+		id_str = "-1"
 	}
+
+	id_int, _ := strconv.Atoi(id_str)
 
 	// We make a channel for receiving updates on the id's of the peers that are alive on network
 	peerUpdateCh := make(chan peers.PeerUpdate)
@@ -108,7 +109,7 @@ func main() { // `go run network_node.go -id=our_id`
 	localStateRx := make(chan fsm.State)
 
 	countCh := make(chan int)
-	idCh := make(chan string)
+	idCh := make(chan int)
 
 	// GO ROUTINES EVERYONE WILL RUN v
 	drv_buttons := make(chan io.ButtonEvent)
@@ -126,22 +127,21 @@ func main() { // `go run network_node.go -id=our_id`
 	go bcast.Receiver(16569, countRx)
 	go bcast.Receiver(16570, localStateRx)
 
-	if id != "-1" { //Nodes with IDs are allowed to transmit
+	if id_int != -1 { //Nodes with IDs are allowed to transmit
 		//fmt.Println("Starting transmitting from ID: ", id)
-		go peers.Transmitter(15647, id, peerTxEnable)
+		go peers.Transmitter(15647, id_str, peerTxEnable)
 		go bcast.Transmitter(16569, countTx)
 		go bcast.Transmitter(16570, localStateTx)
 
 		go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, fsm_n_state_chan, id_int)
-
 	}
 
 	go io.Io(drv_buttons, drv_floors)
 	go orderDelegator.OrderDelegator(n_od_order_chan, od_n_order_chan, globstate_chan, numFloors)
 
 	//Everyone sends out its count msg
-	go func(idCh chan string) {
-		CountMsg := CountMsg{"I'm sending the global state of all lifts", id, 0}
+	go func(idCh chan int) {
+		CountMsg := CountMsg{"I'm sending the global state of all lifts", id_int, 0}
 		for {
 			select {
 			case a := <-idCh: //Needed when node is initialized without id
@@ -180,33 +180,19 @@ func main() { // `go run network_node.go -id=our_id`
 
 			PeerList = p.Peers
 
-			// Initialize ID
-			if id == "-1" {
-				//Empty recieve queue (get last msg)
-				time_out := false
-				timer := time.NewTimer(100 * time.Millisecond) //uses Xms to get latest message
-				for !time_out {
-					select {
-					case <-timer.C:
-						time_out = true
-					case a := <-peerUpdateCh:
-						PeerList = a.Peers
-					}
-				}
-
-				//PeerList = getMostRecentMsg(peerUpdateCh)
-				//print(PeerList)
+			if id_int == -1 {
+				PeerList = getMostRecentMsg(peerUpdateCh, PeerList)
 				id_int = initializeID(PeerList)
-				id = strconv.Itoa(id_int)
+				id_str = strconv.Itoa(id_int)
 
 				//Initialize transmit features for node
 				fmt.Println("Transmitting with ID: ", id_int)
-				go peers.Transmitter(15647, id, peerTxEnable)
+				go peers.Transmitter(15647, id_str, peerTxEnable)
 				go bcast.Transmitter(16569, countTx)
 				go bcast.Transmitter(16570, localStateTx)
 
 				go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, fsm_n_state_chan, id_int)
-				idCh <- id
+				idCh <- id_int
 			}
 
 			// Should I become master?
@@ -219,7 +205,7 @@ func main() { // `go run network_node.go -id=our_id`
 				}
 			}
 		case a := <-countRx:
-			id_i, _ := strconv.Atoi(a.ID)
+			id_i := a.ID
 			if isMaster(PeerList, id_i) {
 				count_glob = a.Iter // Every nodes backups masters state
 			}

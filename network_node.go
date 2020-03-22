@@ -14,9 +14,10 @@ import (
 	"./network/peers"
 )
 
+// CountMsg is a struct sending an alive message with a from id
 type CountMsg struct {
 	Message string
-	ID      int
+	ID      int // from
 	Iter    int
 }
 
@@ -29,8 +30,8 @@ func counter(countCh chan<- int, startFrom int) {
 	}
 }
 
+// isMaster returns true if the ID is the smallest on the network (in the PeerList)
 func isMaster(PeerList []string, ID int) bool {
-	// Returns the true if the ID is the smallest in the PeerList
 	if ID == -1 {
 		return false // Unitialized node cannot be master
 	}
@@ -43,31 +44,31 @@ func isMaster(PeerList []string, ID int) bool {
 	return true
 }
 
+// initializeID initializes the ID to the id to highest_id+1
 func initializeID(PeerList []string) int {
-	//Initializing the id to highest_id+1
-	highest_id := -1
-	p_id := -1
-	for i := 0; i < len(PeerList); i++ { //find the highest id
-		p_id, _ = strconv.Atoi(PeerList[i])
-		if p_id > highest_id {
-			highest_id = p_id
+	highestID := -1
+	peerID := -1
+	for i := 0; i < len(PeerList); i++ {
+		peerID, _ = strconv.Atoi(PeerList[i])
+		if peerID > highestID {
+			highestID = peerID
 		}
 	}
-	return highest_id + 1
+	return highestID + 1
 }
 
+// getMostRecentMsg, listens for messages for a while, gets the most recent message
 func getMostRecentMsg(peerUpdateCh chan peers.PeerUpdate, PeerList []string) []string {
 	//TODO : this function was made to prevent some bug
 	//Atm it does nothing, but things still work...
-	time_out := false
-
+	timeOut := false
 	timer := time.NewTimer(200 * time.Millisecond) //emptys the message stack for 100ms
 	//fmt.Println("WAITING")
-	for !time_out {
+	for !timeOut {
 		select {
 		case <-timer.C:
 			//fmt.Println("TIME OUT!!")
-			time_out = true
+			timeOut = true
 		case a := <-peerUpdateCh:
 			fmt.Println("THIS FUNCTION HAS A PURPOSE :0 !, UPDATING PEERLIST!!") // TODO CODE IS NEVER HERE!!!
 			PeerList = a.Peers

@@ -166,6 +166,9 @@ func main() { // `go run network_node.go -id=our_id`
 				// globState[a.Id] = a
 				// globstate_chan <- globState
 				localStateTx <- a
+			case a := <-fsm_n_order_chan:
+				n_od_order_chan <- a //send order to master
+
 			}
 		}
 	}()
@@ -234,8 +237,8 @@ func main() { // `go run network_node.go -id=our_id`
 			count_glob = a
 			//fmt.Printf("Primary counting: %d \n", count_glob) // Counting only happening from master
 
-		case a := <-fsm_n_order_chan:
-			n_od_order_chan <- a //send order to master
+//		case a := <-fsm_n_order_chan:
+//			n_od_order_chan <- a //send order to master
 
 		case a := <-od_n_order_chan:
 			if isMaster(PeerList, id_int) {

@@ -136,7 +136,7 @@ func whereToGo(curr_floor int, curr_dir io.MotorDirection, numFloors int, orders
 }
 
 func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fsm_n_order_chan chan Order, n_fsm_order_chan chan Order, localstate_chan chan State, id int) {
-	Door_timer := time.NewTimer(120 * time.Second) //init door timer
+	Door_timer := time.NewTimer(1200 * time.Second) //init door timer (TODO, the length of this timer is kinda jalla)
 	//var orders [numFloors * 3]bool                 // [. . .   . . .   . . .   . . . ] (3 x 1.etj, 3 x 2.etj ....)
 	orders := make([]bool, numFloors*3)
 	//INIT PHASE
@@ -154,7 +154,8 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 	sendState(localstate_chan, curr_floor, int(curr_dir), orders, id)
 
 	for {
-		//fmt.Println("New tier while loop")
+		fmt.Println("New iter while loop")
+		fmt.Println("Current state", curr_state)
 		select {
 		case <-Door_timer.C: // door is closing
 			io.SetDoorOpenLamp(false)
@@ -177,7 +178,9 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 			} //idle
 
 		case a := <-drv_buttons:
+			fmt.Println("Sensed button")
 			fsm_n_order_chan <- Order{a, id}
+			fmt.Println("Sent order")
 			//io.SetButtonLamp(a.Button, a.Floor, true)
 			//orders[(a.Floor)*3+int(a.Button)] = true
 			//fmt.Println(orders)
@@ -190,6 +193,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 				removeOrdersInFloor(curr_floor, orders)
 				d = io.MD_Stop
 				io.SetMotorDirection(d)
+				Door_timer = time.NewTimer(3 * time.Second)
 				curr_state = 0 //door_open
 			} else if a == 0 || a == numFloors-1 { // dont stop for order AND in top/bot floor
 				curr_state = 2 //idle
@@ -210,9 +214,11 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 
 		switch curr_state {
 		case 0: //door open
-			removeOrdersInFloor(curr_floor, orders)
-
-			Door_timer = time.NewTimer(3 * time.Second)
+			if(orderInFloor(curr_floor,orders)){
+				removeOrdersInFloor(curr_floor, orders)
+				Door_timer = time.NewTimer(3 * time.Second)
+			}
+			///Door_timer = time.NewTimer(3 * time.Second)
 			io.SetDoorOpenLamp(true)
 		case 1: //running
 			//fmt.Printf("running \n")

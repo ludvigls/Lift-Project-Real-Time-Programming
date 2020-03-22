@@ -14,17 +14,13 @@ import (
 	"./network/peers"
 )
 
-// We define some custom struct to send over the network.
-// Note that all members we want to transmit must be public. Any private members
-//  will be received as zero-values.
 type CountMsg struct {
 	Message string
-	ID      string // TO ID
+	ID      string
 	Iter    int
 }
 
 func counter(countCh chan<- int, startFrom int) {
-	// Will be replaced with a spam orders --> glob order converter
 	count := startFrom
 	for {
 		count++
@@ -33,19 +29,51 @@ func counter(countCh chan<- int, startFrom int) {
 	}
 }
 
-func isMaster(PeersList []string, ID int) bool {
+func isMaster(PeerList []string, ID int) bool {
 	// Returns the true if the ID is the smallest in the PeerList
 	if ID == -1 {
 		return false // Unitialized node cannot be master
 	}
-	for i := 0; i < len(PeersList); i++ {
-		peerID, _ := strconv.Atoi(PeersList[i])
+	for i := 0; i < len(PeerList); i++ {
+		peerID, _ := strconv.Atoi(PeerList[i])
 		if peerID < ID {
 			return false
 		}
 	}
 	return true
 }
+
+func initializeID(PeerList []string) int {
+	//Initializing the id to highest_id+1
+	highest_id := -1
+	p_id := -1
+	for i := 0; i < len(PeerList); i++ { //find the highest id
+		p_id, _ = strconv.Atoi(PeerList[i])
+		if p_id > highest_id {
+			highest_id = p_id
+		}
+	}
+	return highest_id + 1
+}
+
+// func getMostRecentMsg(peerUpdateCh chan peers.PeerUpdate) []string {
+// 	time_out := false
+// 	var PeerList []string
+
+// 	timer := time.NewTimer(2000 * time.Millisecond) //emptys the message stack for 100ms
+// 	fmt.Println("WAITING")
+// 	for !time_out {
+// 		select {
+// 		case <-timer.C:
+// 			fmt.Println("TIME OUT!!")
+// 			time_out = true
+// 		case a := <-peerUpdateCh:
+// 			fmt.Println("UPDATING PEERLIST!!") // TODO CODE IS NEVER HERE!!!
+// 			PeerList = a.Peers
+// 		}
+// 	}
+// 	return PeerList
+// }
 
 func main() { // `go run network_node.go -id=our_id`
 	var id string
@@ -55,8 +83,6 @@ func main() { // `go run network_node.go -id=our_id`
 	globState := make(map[int]fsm.State) //maybe remove idk
 	numFloors := 4
 	lift_port := "15657"
-
-	//numElev := 2
 
 	flag.StringVar(&id, "id", "", "id of this peer")
 	flag.StringVar(&lift_port, "lift_port", "", "lift port of my lift")
@@ -72,9 +98,7 @@ func main() { // `go run network_node.go -id=our_id`
 
 	// We make a channel for receiving updates on the id's of the peers that are alive on network
 	peerUpdateCh := make(chan peers.PeerUpdate)
-	// We can disable/enable the transmitter after it has been started.
-	// This could be used to signal that we are somehow "unavailable".
-	peerTxEnable := make(chan bool)
+	peerTxEnable := make(chan bool) // We can disable/enable the transmitter after it has been started (This could be used to signal that we are somehow "unavailable".)
 
 	// We make channels for sending and receiving our custom data types
 	countTx := make(chan CountMsg)
@@ -86,11 +110,6 @@ func main() { // `go run network_node.go -id=our_id`
 	countCh := make(chan int)
 	idCh := make(chan string)
 
-	// ... and start the transmitter/receiver pair on some port
-	// These functions can take any number of channels! It is also possible to
-	//  start multiple transmitters/receivers on the same port.
-	// A transmitter and receiver transmitting and recieving to the same port
-
 	// GO ROUTINES EVERYONE WILL RUN v
 	drv_buttons := make(chan io.ButtonEvent)
 	drv_floors := make(chan int)
@@ -100,8 +119,7 @@ func main() { // `go run network_node.go -id=our_id`
 	n_fsm_order_chan := make(chan fsm.Order)
 	globstate_chan := make(chan map[int]fsm.State)
 	globstate_chanRXTX := make(chan map[int]fsm.State) //make this udp
-
-	localstate_chan := make(chan fsm.State)
+	fsm_n_state_chan := make(chan fsm.State)
 
 	//Every node initialized as pure recievers
 	go peers.Receiver(15647, peerUpdateCh)
@@ -114,14 +132,12 @@ func main() { // `go run network_node.go -id=our_id`
 		go bcast.Transmitter(16569, countTx)
 		go bcast.Transmitter(16570, localStateTx)
 
-		go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, localstate_chan, id_int)
+		go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, fsm_n_state_chan, id_int)
 
 	}
 
 	go io.Io(drv_buttons, drv_floors)
-	//go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, localstate_chan, id_int)
 	go orderDelegator.OrderDelegator(n_od_order_chan, od_n_order_chan, globstate_chan, numFloors)
-	//go orderDelegator.OrderDelegator(order_chan, state_chan, numFloors, numElev)
 
 	//Everyone sends out its count msg
 	go func(idCh chan string) {
@@ -138,22 +154,22 @@ func main() { // `go run network_node.go -id=our_id`
 		}
 	}(idCh)
 
+	// TODO : dont be annonomous?? add comments "remove" placeholder functionality
 	go func() {
 		for {
 			select {
 			case a := <-globstate_chanRXTX:
 				//NB, master now sends out glob state to port and saves same glob state from port
 				globState = a
-			case a := <-localstate_chan:
+			case a := <-fsm_n_state_chan:
 				//fmt.Println("Sending my state now")
-				globState[a.Id] = a
-				globstate_chan <- globState
+				// globState[a.Id] = a
+				// globstate_chan <- globState
 				localStateTx <- a
-
 			}
-
 		}
 	}()
+
 	for {
 		select {
 		case p := <-peerUpdateCh:
@@ -166,7 +182,6 @@ func main() { // `go run network_node.go -id=our_id`
 
 			// Initialize ID
 			if id == "-1" {
-
 				//Empty recieve queue (get last msg)
 				time_out := false
 				timer := time.NewTimer(100 * time.Millisecond) //uses Xms to get latest message
@@ -179,16 +194,9 @@ func main() { // `go run network_node.go -id=our_id`
 					}
 				}
 
-				//Initialize to highest_ID in peers list + 1
-				highest_id := -1
-				p_id := -1
-				for i := 0; i < len(PeerList); i++ { //find the highest id
-					p_id, _ = strconv.Atoi(PeerList[i])
-					if p_id > highest_id {
-						highest_id = p_id
-					}
-				}
-				id_int = highest_id + 1
+				//PeerList = getMostRecentMsg(peerUpdateCh)
+				//print(PeerList)
+				id_int = initializeID(PeerList)
 				id = strconv.Itoa(id_int)
 
 				//Initialize transmit features for node
@@ -197,8 +205,7 @@ func main() { // `go run network_node.go -id=our_id`
 				go bcast.Transmitter(16569, countTx)
 				go bcast.Transmitter(16570, localStateTx)
 
-				go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, localstate_chan, id_int)
-
+				go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, fsm_n_state_chan, id_int)
 				idCh <- id
 			}
 
@@ -208,43 +215,27 @@ func main() { // `go run network_node.go -id=our_id`
 				if !hasBeenMaster {
 					go counter(countCh, count_glob)
 					//go orderDelegator.OrderDelegator(n_od_order_chan, od_n_order_chan, globstate_chan, numFloors)
-					//take in local msg --> one global msg
 					hasBeenMaster = true
 				}
 			}
 		case a := <-countRx:
-			//fmt.Println("from: ", a.ID)
 			id_i, _ := strconv.Atoi(a.ID)
 			if isMaster(PeerList, id_i) {
 				count_glob = a.Iter // Every nodes backups masters state
 			}
-		case a := <-localStateRx:
-			//fmt.Println("I RECIEVD SHIT ON UDP")
+		case a := <-localStateRx: // recieved local state from any lift
 			if isMaster(PeerList, id_int) {
-				//fmt.Println("from: ", a.Id)
-				//fmt.Println("floor: ", a.Floor)
-				globState[a.Id] = a
-				//fmt.Println(globState)
-				//send to orderdelegator
-				globstate_chan <- globState
-				globstate_chanRXTX <- globState
+				globState[a.Id] = a             // update global state
+				globstate_chan <- globState     // send out global state on network
+				globstate_chanRXTX <- globState //??
 			}
 
 		case a := <-countCh: // LOCAL message only heard on local computer
 			count_glob = a
 			//fmt.Printf("Primary counting: %d \n", count_glob) // Counting only happening from master
-		/*case a := <-localstate_chan:
-		fmt.Println("Sending my state now")
-		globState[a.Id] = a
-		globstate_chan <- globState
-		localStateTx <- a
-		*/
-		//fmt.Println("Elevator now at floor", a.Floor)
-		//send state to master
+
 		case a := <-fsm_n_order_chan:
-			//fmt.Println("Incoming order at floor", a.Location.Floor)
-			n_od_order_chan <- a
-			//send order to master
+			n_od_order_chan <- a //send order to master
 
 		case a := <-od_n_order_chan:
 			if isMaster(PeerList, id_int) {
@@ -252,11 +243,10 @@ func main() { // `go run network_node.go -id=our_id`
 					n_fsm_order_chan <- a
 				}
 			}
-			// eller send ut på nettet
-			//fmt.Println("SENT AN ASSIGNED ORDER!! NETWROK", a.Location.Floor)
-		}
-		//send order to master
-	}
-	//add case for incoming message from master with new orders, send to fsm
+			//else { send ut på nettet }
+			//send order to master
 
+			//add case for incoming message from master with new orders, send to fsm
+		}
+	}
 }

@@ -8,13 +8,13 @@ import (
 
 	"./fsm"
 	"./io"
-	"./orderDelegator"
+	orderdelegator "./orderdelegator"
 
 	"./network/bcast"
 	"./network/peers"
 )
 
-// CountMsg is a struct sending an alive message with a from id
+// CountMsg is a struct sending an alive message with id
 type CountMsg struct {
 	Message string
 	ID      int // from
@@ -139,7 +139,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	}
 
 	go io.Io(drv_buttons, drv_floors)
-	go orderDelegator.OrderDelegator(n_od_order_chan, od_n_order_chan, globstate_chan, numFloors)
+	go orderdelegator.OrderDelegator(n_od_order_chan, od_n_order_chan, globstate_chan, numFloors)
 
 	//Everyone sends out its count msg
 	go func(idCh chan int) {
@@ -210,7 +210,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				//fmt.Printf("I am primary and count from:  %d \n", count_glob)
 				if !hasBeenMaster {
 					go counter(countCh, count_glob)
-					//go orderDelegator.OrderDelegator(n_od_order_chan, od_n_order_chan, globstate_chan, numFloors)
+					//go orderdelegator.OrderDelegator(n_od_order_chan, od_n_order_chan, globstate_chan, numFloors)
 					hasBeenMaster = true
 				}
 			}

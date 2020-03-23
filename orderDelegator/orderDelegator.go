@@ -8,22 +8,7 @@ import (
 	"../io"
 )
 
-func testOrder(order_chan chan int) {
-	for {
-		select {
-		case a := <-order_chan:
-			fmt.Printf("\nWE GOT ORDER %d on CHAN\n", a)
-		}
-	}
-}
-func testState(state_chan chan fsm.State) {
-	for {
-		select {
-		case <-state_chan:
-			fmt.Printf("\nWE GOT STATEEEEEEEEEEEEEEEEEEEEEEEEEE  on CHAN\n")
-		}
-	}
-}
+
 
 func cost(order fsm.Order, state fsm.State, numFloors int) int {
 	num_orders := 0

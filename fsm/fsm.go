@@ -140,7 +140,6 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 	//var orders [numFloors * 3]bool                 // [. . .   . . .   . . .   . . . ] (3 x 1.etj, 3 x 2.etj ....)
 	orders := make([]bool, numFloors*3)
 	//INIT PHASE
-	fmt.Println("STARTED FSM")
 
 	var d io.MotorDirection = io.MD_Up
 	curr_dir := io.MD_Up
@@ -154,7 +153,6 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 	sendState(localstate_chan, curr_floor, int(curr_dir), orders, id)
 
 	for {
-		fmt.Println("New iter while loop")
 		fmt.Println("Current state", curr_state)
 		select {
 		case <-Door_timer.C: // door is closing
@@ -166,10 +164,8 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 				curr_state = 0 // go to door open state
 			} else if hasOrder(orders) {
 				curr_state = 1 //running
-				fmt.Println("My direction was")
 				fmt.Println(curr_dir)
 				d = whereToGo(curr_floor, curr_dir, numFloors, orders)
-				fmt.Println("I want to go")
 				fmt.Println(d)
 				curr_dir = d
 				io.SetMotorDirection(d)
@@ -178,9 +174,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 			} //idle
 
 		case a := <-drv_buttons:
-			fmt.Println("Sensed button")
 			fsm_n_order_chan <- Order{a, id}
-			fmt.Println("Sent order")
 			//io.SetButtonLamp(a.Button, a.Floor, true)
 			//orders[(a.Floor)*3+int(a.Button)] = true
 			//fmt.Println(orders)

@@ -1,1 +1,0 @@
-remember bug that the elevator goes to first floor all the time 

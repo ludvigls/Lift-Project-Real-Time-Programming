@@ -21,6 +21,7 @@ type CountMsg struct {
 	Iter    int
 }
 
+// counter, func for testing network
 func counter(countCh chan<- int, startFrom int) {
 	count := startFrom
 	for {
@@ -77,26 +78,26 @@ func getMostRecentMsg(peerUpdateCh chan peers.PeerUpdate, PeerList []string) []s
 	return PeerList
 }
 
-func main() { // `go run network_node.go -id=our_id`
-	var id_str string
+func main() { // `go run network_node.go -id=our_id` -liftPort=15657
+	var idStr string
 	var count_glob int
 	var PeerList []string
 	var hasBeenMaster bool
-	globState := make(map[int]fsm.State) //maybe remove idk
+	globState := make(map[int]fsm.State)
 	numFloors := 4
-	lift_port := "15657"
+	liftPort := "15657"
 
-	flag.StringVar(&id_str, "id", "", "id of this peer")
-	flag.StringVar(&lift_port, "lift_port", "", "lift port of my lift")
+	flag.StringVar(&idStr, "id", "", "id of this peer")
+	flag.StringVar(&liftPort, "port", "", "port to the lift connected")
 	flag.Parse()
 
-	io.Init("localhost:"+lift_port, numFloors)
+	io.Init("localhost:"+liftPort, numFloors)
 
-	if id_str == "" {
-		id_str = "-1"
+	if idStr == "" {
+		idStr = "-1"
 	}
 
-	id_int, _ := strconv.Atoi(id_str)
+	idInt, _ := strconv.Atoi(idStr)
 
 	// We make a channel for receiving updates on the id's of the peers that are alive on network
 	peerUpdateCh := make(chan peers.PeerUpdate)
@@ -128,13 +129,13 @@ func main() { // `go run network_node.go -id=our_id`
 	go bcast.Receiver(16569, countRx)
 	go bcast.Receiver(16570, localStateRx)
 
-	if id_int != -1 { //Nodes with IDs are allowed to transmit
+	if idInt != -1 { //Nodes with IDs are allowed to transmit
 		//fmt.Println("Starting transmitting from ID: ", id)
-		go peers.Transmitter(15647, id_str, peerTxEnable)
+		go peers.Transmitter(15647, idStr, peerTxEnable)
 		go bcast.Transmitter(16569, countTx)
 		go bcast.Transmitter(16570, localStateTx)
 
-		go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, fsm_n_state_chan, id_int)
+		go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, fsm_n_state_chan, idInt)
 	}
 
 	go io.Io(drv_buttons, drv_floors)
@@ -142,7 +143,7 @@ func main() { // `go run network_node.go -id=our_id`
 
 	//Everyone sends out its count msg
 	go func(idCh chan int) {
-		CountMsg := CountMsg{"I'm sending the global state of all lifts", id_int, 0}
+		CountMsg := CountMsg{"I'm sending the global state of all lifts", idInt, 0}
 		for {
 			select {
 			case a := <-idCh: //Needed when node is initialized without id
@@ -181,23 +182,22 @@ func main() { // `go run network_node.go -id=our_id`
 
 			PeerList = p.Peers
 
-			if id_int == -1 {
+			if idInt == -1 {
 				PeerList = getMostRecentMsg(peerUpdateCh, PeerList)
-				id_int = initializeID(PeerList)
-				id_str = strconv.Itoa(id_int)
+				idInt = initializeID(PeerList)
 
 				//Initialize transmit features for node
-				fmt.Println("Transmitting with ID: ", id_int)
-				go peers.Transmitter(15647, id_str, peerTxEnable)
+				fmt.Println("Transmitting with ID: ", idInt)
+				go peers.Transmitter(15647, strconv.Itoa(idInt), peerTxEnable)
 				go bcast.Transmitter(16569, countTx)
 				go bcast.Transmitter(16570, localStateTx)
 
-				go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, fsm_n_state_chan, id_int)
-				idCh <- id_int
+				go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, fsm_n_state_chan, idInt)
+				idCh <- idInt
 			}
 
 			// Should I become master?
-			if isMaster(PeerList, id_int) {
+			if isMaster(PeerList, idInt) {
 				//fmt.Printf("I am primary and count from:  %d \n", count_glob)
 				if !hasBeenMaster {
 					go counter(countCh, count_glob)
@@ -206,12 +206,12 @@ func main() { // `go run network_node.go -id=our_id`
 				}
 			}
 		case a := <-countRx:
-			id_i := a.ID
-			if isMaster(PeerList, id_i) {
+			idPeer := a.ID
+			if isMaster(PeerList, idPeer) {
 				count_glob = a.Iter // Every nodes backups masters state
 			}
 		case a := <-localStateRx: // recieved local state from any lift
-			if isMaster(PeerList, id_int) {
+			if isMaster(PeerList, idInt) {
 				globState[a.Id] = a             // update global state
 				globstate_chan <- globState     // send out global state on network
 				globstate_chanRXTX <- globState //??
@@ -225,8 +225,8 @@ func main() { // `go run network_node.go -id=our_id`
 			n_od_order_chan <- a //send order to master
 
 		case a := <-od_n_order_chan:
-			if isMaster(PeerList, id_int) {
-				if a.Id == id_int {
+			if isMaster(PeerList, idInt) {
+				if a.Id == idInt {
 					n_fsm_order_chan <- a
 				}
 			}

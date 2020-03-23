@@ -83,7 +83,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	var count_glob int
 	var PeerList []string
 	var hasBeenMaster bool
-	globState := make(map[int]fsm.State)
+	globState := make(map[string]fsm.State)
 	numFloors := 4
 	liftPort := "15657"
 
@@ -110,6 +110,9 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	localStateTx := make(chan fsm.State)
 	localStateRx := make(chan fsm.State)
 
+	globStateTx := make(chan map[string]fsm.State)
+	globStateRx := make(chan map[string]fsm.State)
+
 	countCh := make(chan int)
 	idCh := make(chan int)
 
@@ -120,21 +123,22 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	n_od_order_chan := make(chan fsm.Order)
 	od_n_order_chan := make(chan fsm.Order)
 	n_fsm_order_chan := make(chan fsm.Order)
-	globstate_chan := make(chan map[int]fsm.State)
-	globstate_chanRXTX := make(chan map[int]fsm.State) //make this udp
+	globstate_chan := make(chan map[string]fsm.State)
+	//globstate_chanRXTX := make(chan map[int]fsm.State) //make this udp
 	fsm_n_state_chan := make(chan fsm.State)
 
 	//Every node initialized as pure recievers
 	go peers.Receiver(15647, peerUpdateCh)
 	go bcast.Receiver(16569, countRx)
 	go bcast.Receiver(16570, localStateRx)
-
+	go bcast.Receiver(16571, globStateRx)
+	
 	if idInt != -1 { //Nodes with IDs are allowed to transmit
 		//fmt.Println("Starting transmitting from ID: ", id)
 		go peers.Transmitter(15647, idStr, peerTxEnable)
 		go bcast.Transmitter(16569, countTx)
 		go bcast.Transmitter(16570, localStateTx)
-
+		go bcast.Transmitter(16571, globStateTx)
 		go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, fsm_n_state_chan, idInt)
 	}
 
@@ -160,9 +164,11 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	go func() {
 		for {
 			select {
-			case a := <-globstate_chanRXTX:
+			case a := <-globStateRx:
 				//NB, master now sends out glob state to port and saves same glob state from port
 				globState = a
+				globstate_chan <- globState
+				fmt.Println(globState)
 			case a := <-fsm_n_state_chan:
 				//fmt.Println("Sending my state now")
 				// globState[a.Id] = a
@@ -176,6 +182,9 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	}()
 
 	for {
+
+	
+
 		select {
 		case p := <-peerUpdateCh:
 			fmt.Printf("Peer update:\n")
@@ -220,10 +229,11 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				count_glob = a.Iter // Every nodes backups masters state
 			}
 		case a := <-localStateRx: // recieved local state from any lift
+			
 			if isMaster(PeerList, idInt) {
-				globState[a.Id] = a             // update global state
+				globState[strconv.Itoa(a.Id)] = a             // update global state
 				globstate_chan <- globState     // send out global state on network
-				globstate_chanRXTX <- globState //??
+				globStateTx <- globState
 			}
 
 		case a := <-countCh: // LOCAL message only heard on local computer

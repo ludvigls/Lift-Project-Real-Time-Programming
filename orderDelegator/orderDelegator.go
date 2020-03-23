@@ -3,7 +3,7 @@ package orderDelegator
 import (
 	"fmt"
 	"math"
-
+	"strconv"
 	"../fsm"
 	"../io"
 )
@@ -32,7 +32,7 @@ func cost(order fsm.Order, state fsm.State, numFloors int) int {
 	return num_orders + dist_cost + dir_cost
 }
 
-func OrderDelegator(n_od_order_chan chan fsm.Order, od_n_order_chan chan fsm.Order, states_chan chan map[int]fsm.State, numFloors int) {
+func OrderDelegator(n_od_order_chan chan fsm.Order, od_n_order_chan chan fsm.Order, states_chan chan map[string]fsm.State, numFloors int) {
 	//go testOrder(order_chan)
 	//go testState(state_chan)
 	/*states := make([]fsm.State, numElev)
@@ -46,7 +46,7 @@ func OrderDelegator(n_od_order_chan chan fsm.Order, od_n_order_chan chan fsm.Ord
 	}
 	*/
 
-	states := make(map[int]fsm.State)
+	states := make(map[string]fsm.State)
 
 	//orders := make([]bool, numFloors*3) //inits as false :D
 	//orders[4] = true
@@ -65,7 +65,7 @@ func OrderDelegator(n_od_order_chan chan fsm.Order, od_n_order_chan chan fsm.Ord
 			//fmt.Printf("\nIn floor %d\n", a.Floor)
 			states = a
 			//fmt.Println("We got the fuckin states")
-			fmt.Println(states)
+			//fmt.Println(states)
 
 		case a := <-n_od_order_chan:
 			//fmt.Printf("Order in floor %d", a.Location.Floor) /
@@ -73,7 +73,7 @@ func OrderDelegator(n_od_order_chan chan fsm.Order, od_n_order_chan chan fsm.Ord
 				fmt.Println("GAVE ORDER TO ID:",a.Id)
 				od_n_order_chan <- a
 			} else {
-				costs := make(map[int]int)
+				costs := make(map[string]int)
 				for k, v := range states {
 					costs[k] = cost(a, v, numFloors)
 				}
@@ -81,7 +81,7 @@ func OrderDelegator(n_od_order_chan chan fsm.Order, od_n_order_chan chan fsm.Ord
 				min_cost := 1000
 				for id, cost := range costs {
 					if cost < min_cost {
-						min_id = id
+						min_id,_ = strconv.Atoi(id)
 						min_cost = cost
 					}
 				}

@@ -1,7 +1,6 @@
 package fsm
 
 import (
-	"fmt"
 	"time"
 
 	"../io"
@@ -81,7 +80,6 @@ func stopForOrder(curr_floor int, curr_dir io.MotorDirection, numFloors int, ord
 		}
 		if orders[curr_floor*3+int(io.BT_HallUp)] {
 			for f := 0; f < curr_floor; f++ {
-				fmt.Printf("floor= %d \n", f)
 				if orders[f*3+int(io.BT_HallDown)] || orders[f*3+int(io.BT_Cab)] || orders[f*3+int(io.BT_HallUp)] { //OR CAB
 
 					return false
@@ -153,7 +151,6 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 	sendState(localstate_chan, curr_floor, int(curr_dir), orders, id)
 
 	for {
-		fmt.Println("Current state", curr_state)
 		select {
 		case <-Door_timer.C: // door is closing
 			io.SetDoorOpenLamp(false)
@@ -164,9 +161,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 				curr_state = 0 // go to door open state
 			} else if hasOrder(orders) {
 				curr_state = 1 //running
-				fmt.Println(curr_dir)
 				d = whereToGo(curr_floor, curr_dir, numFloors, orders)
-				fmt.Println(d)
 				curr_dir = d
 				io.SetMotorDirection(d)
 			} else {

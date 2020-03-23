@@ -85,6 +85,7 @@ func OrderDelegator(n_od_order_chan chan fsm.Order, od_n_order_chan chan fsm.Ord
 		case a := <-n_od_order_chan:
 			//fmt.Printf("Order in floor %d", a.Location.Floor) /
 			if a.Location.Button == io.BT_Cab { //cab orders should always be taken at the
+				fmt.Println("GAVE ORDER TO ID:",a.Id)
 				od_n_order_chan <- a
 			} else {
 				costs := make(map[int]int)
@@ -103,6 +104,7 @@ func OrderDelegator(n_od_order_chan chan fsm.Order, od_n_order_chan chan fsm.Ord
 				//fmt.Println("costs:")
 				//fmt.Println(costs)
 				a.Id = min_id
+				fmt.Println("GAVE ORDER TO ID:",a.Id)
 				od_n_order_chan <- a
 				//fmt.Printf("\nGive order to id: %d \n", min_id)
 			}

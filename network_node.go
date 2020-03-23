@@ -185,6 +185,12 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 
 			PeerList = p.Peers
 
+			//TODO - oppdater globstate når flere heiser blir borte
+
+			// update globState
+
+			//send out globState
+
 			if idInt == -1 {
 				PeerList = getMostRecentMsg(peerUpdateCh, PeerList)
 				idInt = initializeID(PeerList)
@@ -224,8 +230,8 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 			count_glob = a
 			//fmt.Printf("Primary counting: %d \n", count_glob) // Counting only happening from master
 
-//		case a := <-fsm_n_order_chan:
-//			n_od_order_chan <- a //send order to master
+			//		case a := <-fsm_n_order_chan:
+			//			n_od_order_chan <- a //send order to master
 
 		case a := <-od_n_order_chan:
 			if isMaster(PeerList, idInt) {

@@ -116,13 +116,13 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	// GO ROUTINES EVERYONE WILL RUN v
 	drv_buttons := make(chan io.ButtonEvent)
 	drv_floors := make(chan int)
-	fsm_n_order_chan := make(chan fsm.Order)
-	n_od_order_chan := make(chan fsm.Order)
-	od_n_order_chan := make(chan fsm.Order)
-	n_fsm_order_chan := make(chan fsm.Order)
-	globstate_chan := make(chan map[int]fsm.State)
-	globstate_chanRXTX := make(chan map[int]fsm.State) //make this udp
-	fsm_n_state_chan := make(chan fsm.State)
+	fsm_n_orderCh := make(chan fsm.Order)
+	n_od_orderCh := make(chan fsm.Order)
+	od_n_orderCh := make(chan fsm.Order)
+	n_fsm_orderCh := make(chan fsm.Order)
+	globstateCh := make(chan map[int]fsm.State)
+	globstateChRXTX := make(chan map[int]fsm.State) //make this udp
+	fsm_n_stateCh := make(chan fsm.State)
 
 	//Every node initialized as pure recievers
 	go peers.Receiver(15647, peerUpdateCh)
@@ -135,11 +135,11 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 		go bcast.Transmitter(16569, countTx)
 		go bcast.Transmitter(16570, localStateTx)
 
-		go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, fsm_n_state_chan, idInt)
+		go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_orderCh, n_fsm_orderCh, fsm_n_stateCh, idInt)
 	}
 
 	go io.Io(drv_buttons, drv_floors)
-	go orderdelegator.OrderDelegator(n_od_order_chan, od_n_order_chan, globstate_chan, numFloors)
+	go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, globstateCh, numFloors)
 
 	//Everyone sends out its count msg
 	go func(idCh chan int) {
@@ -160,16 +160,16 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	go func() {
 		for {
 			select {
-			case a := <-globstate_chanRXTX:
+			case a := <-globstateChRXTX:
 				//NB, master now sends out glob state to port and saves same glob state from port
 				globState = a
-			case a := <-fsm_n_state_chan:
+			case a := <-fsm_n_stateCh:
 				//fmt.Println("Sending my state now")
 				// globState[a.Id] = a
-				// globstate_chan <- globState
+				// globstateCh <- globState
 				localStateTx <- a
-			case a := <-fsm_n_order_chan:
-				n_od_order_chan <- a //send order to master
+			case a := <-fsm_n_orderCh:
+				n_od_orderCh <- a //send order to master
 
 			}
 		}
@@ -201,7 +201,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				go bcast.Transmitter(16569, countTx)
 				go bcast.Transmitter(16570, localStateTx)
 
-				go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_order_chan, n_fsm_order_chan, fsm_n_state_chan, idInt)
+				go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_orderCh, n_fsm_orderCh, fsm_n_stateCh, idInt)
 				idCh <- idInt
 			}
 
@@ -210,7 +210,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				//fmt.Printf("I am primary and count from:  %d \n", count_glob)
 				if !hasBeenMaster {
 					go counter(countCh, count_glob)
-					//go orderdelegator.OrderDelegator(n_od_order_chan, od_n_order_chan, globstate_chan, numFloors)
+					//go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, globstateCh, numFloors)
 					hasBeenMaster = true
 				}
 			}
@@ -221,22 +221,22 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 			}
 		case a := <-localStateRx: // recieved local state from any lift
 			if isMaster(PeerList, idInt) {
-				globState[a.Id] = a             // update global state
-				globstate_chan <- globState     // send out global state on network
-				globstate_chanRXTX <- globState //??
+				globState[a.ID] = a          // update global state
+				globstateCh <- globState     // send out global state on network
+				globstateChRXTX <- globState //??
 			}
 
 		case a := <-countCh: // LOCAL message only heard on local computer
 			count_glob = a
 			//fmt.Printf("Primary counting: %d \n", count_glob) // Counting only happening from master
 
-			//		case a := <-fsm_n_order_chan:
-			//			n_od_order_chan <- a //send order to master
+			//		case a := <-fsm_n_orderCh:
+			//			n_od_orderCh <- a //send order to master
 
-		case a := <-od_n_order_chan:
+		case a := <-od_n_orderCh:
 			if isMaster(PeerList, idInt) {
-				if a.Id == idInt {
-					n_fsm_order_chan <- a
+				if a.ID == idInt {
+					n_fsm_orderCh <- a
 				}
 			}
 			//else { send ut på nettet }

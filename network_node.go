@@ -132,7 +132,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	go bcast.Receiver(16569, countRx)
 	go bcast.Receiver(16570, localStateRx)
 	go bcast.Receiver(16571, globStateRx)
-	
+
 	if idInt != -1 { //Nodes with IDs are allowed to transmit
 		//fmt.Println("Starting transmitting from ID: ", id)
 		go peers.Transmitter(15647, idStr, peerTxEnable)
@@ -168,6 +168,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				//NB, master now sends out glob state to port and saves same glob state from port
 				globState = a
 				globstate_chan <- globState
+				fmt.Println("recieved globstate!")
 				fmt.Println(globState)
 			case a := <-fsm_n_state_chan:
 				//fmt.Println("Sending my state now")
@@ -183,8 +184,6 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 
 	for {
 
-	
-
 		select {
 		case p := <-peerUpdateCh:
 			fmt.Printf("Peer update:\n")
@@ -194,18 +193,12 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 
 			PeerList = p.Peers
 
-			//TODO - oppdater globstate når flere heiser blir borte
-
-			// update globState
-
-			//send out globState
-
 			if idInt == -1 {
 				PeerList = getMostRecentMsg(peerUpdateCh, PeerList)
 				idInt = initializeID(PeerList)
 
 				//Initialize transmit features for node
-				fmt.Println("Transmitting with ID: ", idInt)
+				//fmt.Println("Transmitting with ID: ", idInt)
 				go peers.Transmitter(15647, strconv.Itoa(idInt), peerTxEnable)
 				go bcast.Transmitter(16569, countTx)
 				go bcast.Transmitter(16570, localStateTx)
@@ -214,13 +207,22 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				idCh <- idInt
 			}
 
-			// Should I become master?
 			if isMaster(PeerList, idInt) {
 				//fmt.Printf("I am primary and count from:  %d \n", count_glob)
-				if !hasBeenMaster {
+				if !hasBeenMaster { // Should I statrt doing master functionality
 					go counter(countCh, count_glob)
 					//go orderDelegator.OrderDelegator(n_od_order_chan, od_n_order_chan, globstate_chan, numFloors)
 					hasBeenMaster = true
+				}
+
+				// update globState
+				if len(p.Lost) > 0 {
+					for i := 0; i < len(p.Lost); i++ {
+						fmt.Println("Removing lost lift from globState")
+						delete(globState, p.Lost[i])
+					}
+					globstate_chan <- globState
+					globStateTx <- globState
 				}
 			}
 		case a := <-countRx:
@@ -229,10 +231,9 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				count_glob = a.Iter // Every nodes backups masters state
 			}
 		case a := <-localStateRx: // recieved local state from any lift
-			
 			if isMaster(PeerList, idInt) {
-				globState[strconv.Itoa(a.Id)] = a             // update global state
-				globstate_chan <- globState     // send out global state on network
+				globState[strconv.Itoa(a.Id)] = a // update global state
+				globstate_chan <- globState       // send out global state on network
 				globStateTx <- globState
 			}
 

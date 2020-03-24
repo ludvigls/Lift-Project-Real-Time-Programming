@@ -126,14 +126,14 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	drv_buttons := make(chan io.ButtonEvent)
 	drv_floors := make(chan int)
 
-	fsm_n_order_chan := make(chan fsm.Order, 1000000)
-	n_od_order_chan := make(chan fsm.Order, 1000000)
-	od_n_order_chan := make(chan fsm.Order, 1000000)
-	n_fsm_order_chan := make(chan fsm.Order, 1000000)
+	fsm_n_order_chan := make(chan fsm.Order, 1000)
+	n_od_order_chan := make(chan fsm.Order, 1000)
+	od_n_order_chan := make(chan fsm.Order, 1000)
+	n_fsm_order_chan := make(chan fsm.Order, 1000)
 
-	globstate_chan := make(chan map[string]fsm.State, 1000000)
+	globstate_chan := make(chan map[string]fsm.State, 1000)
 	//globstate_chanRXTX := make(chan map[int]fsm.State) //make this udp
-	fsm_n_state_chan := make(chan fsm.State, 1000000)
+	fsm_n_state_chan := make(chan fsm.State, 1000)
 
 	//Every node initialized as pure recievers
 	go peers.Receiver(15647, peerUpdateCh)
@@ -172,27 +172,6 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 			}
 		}
 	}(idCh)
-
-	// TODO : dont be annonomous?? add comments "remove" placeholder functionality
-	go func() {
-		for {
-			select {
-			case a := <-globStateRx:
-				//NB, master now sends out glob state to port and saves same glob state from port
-				globState = a
-				globstate_chan <- globState
-				fmt.Println(globState)
-			case a := <-fsm_n_state_chan:
-				//fmt.Println("Sending my state now")
-				// globState[a.Id] = a
-				// globstate_chan <- globState
-				localStateTx <- a
-			case a := <-fsm_n_order_chan:
-				n_od_order_chan <- a //send order to master
-				unassignedOrderTx <- a
-			}
-		}
-	}()
 
 	for {
 
@@ -234,8 +213,24 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 					hasBeenMaster = true
 				}
 			}
+		case a := <-globStateRx:
+			//NB, master now sends out glob state to port and saves same glob state from port
+			if !isMaster(PeerList, idInt) {
+				globState = a
+				globstate_chan <- globState
+				fmt.Println(globState)
+			}
 		case a := <-unassignedOrderRx:
 			n_od_order_chan <- a
+
+		case a := <-fsm_n_state_chan:
+			//fmt.Println("Sending my state now")
+			// globState[a.Id] = a
+			// globstate_chan <- globState
+			localStateTx <- a
+		case a := <-fsm_n_order_chan:
+			n_od_order_chan <- a //send order to master
+			unassignedOrderTx <- a
 		case a := <-countRx:
 			idPeer := a.ID
 			if isMaster(PeerList, idPeer) {

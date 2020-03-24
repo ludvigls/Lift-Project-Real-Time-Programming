@@ -30,10 +30,10 @@ const ( //TODO remove / use somewhere?
 )
 
 // Locally sends the state
-func sendState(localstate_chan chan State, floor int, dir int, orders []bool, id int) {
+func sendState(localstateCh chan State, floor int, dir int, orders []bool, id int) {
 	state := State{orders, floor, dir, id}
 	//fmt.Println("ALMOST SENT STATE")
-	localstate_chan <- state
+	localstateCh <- state
 	//fmt.Println("SENT STATE")
 	return
 }
@@ -139,7 +139,7 @@ func whereToGo(currFloor int, currDir io.MotorDirection, numFloors int, orders [
 }
 
 //Fsm is the 'main' function for the fsm module
-func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fsm_n_order_chan chan Order, n_fsm_order_chan chan Order, localstate_chan chan State, id int) {
+func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fsm_n_orderCh chan Order, n_fsm_orderCh chan Order, localstateCh chan State, id int) {
 	Door_timer := time.NewTimer(1200 * time.Second) //init door timer (TODO, the length of this timer is kinda jalla)
 	//var orders [numFloors * 3]bool                 // [. . .   . . .   . . .   . . . ] (3 x 1.etj, 3 x 2.etj ....)
 	orders := make([]bool, numFloors*3)
@@ -154,7 +154,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 	io.SetMotorDirection(d)
 	var curr_state state
 	curr_state = 2 //idle
-	sendState(localstate_chan, currFloor, int(currDir), orders, id)
+	sendState(localstateCh, currFloor, int(currDir), orders, id)
 
 	for {
 		fmt.Println("Current state", curr_state)
@@ -178,7 +178,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 			} //idle
 
 		case a := <-drv_buttons:
-			fsm_n_order_chan <- Order{a, id}
+			fsm_n_orderCh <- Order{a, id}
 			//io.SetButtonLamp(a.Button, a.Floor, true)
 			//orders[(a.Floor)*3+int(a.Button)] = true
 			//fmt.Println(orders)
@@ -204,7 +204,7 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 					currDir = io.MD_Up
 				}
 			}
-		case a := <-n_fsm_order_chan:
+		case a := <-n_fsm_orderCh:
 			//fmt.Println("GOT AN ASSIGNED ORDER")
 			orders[a.Location.Floor*3+int(a.Location.Button)] = true
 			io.SetButtonLamp(a.Location.Button, a.Location.Floor, true)
@@ -238,6 +238,6 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 			}
 
 		}
-		sendState(localstate_chan, currFloor, int(currDir), orders, id)
+		sendState(localstateCh, currFloor, int(currDir), orders, id)
 	}
 }

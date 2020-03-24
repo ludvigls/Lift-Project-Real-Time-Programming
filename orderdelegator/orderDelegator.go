@@ -31,46 +31,20 @@ func cost(order fsm.Order, state fsm.State, numFloors int) int {
 }
 
 //OrderDelegator is the 'main' function of the orderDelegator module
-func OrderDelegator(n_od_order_chan chan fsm.Order, od_n_order_chan chan fsm.Order, states_chan chan map[int]fsm.State, numFloors int) {
-	//go testOrder(order_chan)
-	//go testState(state_chan)
-	/*states := make([]fsm.State, numElev)
-	for i := 0; i < numElev; i++ {
-		orders := make([]bool, numFloors*3) //inits as false :D
-		var state fsm.State
-		state.Exe_orders = orders
-		state.Floor = 0
-		state.Dir = 0
-
-	}
-	*/
-
+func OrderDelegator(n_od_orderCh chan fsm.Order, od_n_orderCh chan fsm.Order, statesCh chan map[int]fsm.State, numFloors int) {
 	states := make(map[int]fsm.State)
 
-	//orders := make([]bool, numFloors*3) //inits as false :D
-	//orders[4] = true
-	//orders[5] = true
-	/*
-		var state fsm.State
-		state.Exe_orders = orders //only for testing
-		state.Floor = 0
-		state.Dir = 0
-		state.Id = 2
-		states[state.Id] = state
-	*/
 	for {
 		select {
-		case a := <-states_chan:
-			//fmt.Printf("\nIn floor %d\n", a.Floor)
+		case a := <-statesCh:
 			states = a
-			//fmt.Println("We got the fuckin states")
 			fmt.Println(states)
 
-		case a := <-n_od_order_chan:
+		case a := <-n_od_orderCh:
 			//fmt.Printf("Order in floor %d", a.Location.Floor) /
 			if a.Location.Button == io.BT_Cab { //cab orders should always be taken at the
-				fmt.Println("GAVE ORDER TO ID:", a.Id)
-				od_n_order_chan <- a
+				fmt.Println("CAB ORDER TAKEN BY MYSELF:", a.Id)
+				od_n_orderCh <- a
 			} else {
 				costs := make(map[int]int)
 				for k, v := range states {
@@ -85,14 +59,11 @@ func OrderDelegator(n_od_order_chan chan fsm.Order, od_n_order_chan chan fsm.Ord
 					}
 				}
 				//send order to correct elev
-				//fmt.Println("costs:")
-				//fmt.Println(costs)
 				a.Id = minID
 				fmt.Println("GAVE ORDER TO ID:", a.Id)
-				od_n_order_chan <- a
+				od_n_orderCh <- a
 				//fmt.Printf("\nGive order to id: %d \n", minID)
 			}
-
 		}
 	}
 }

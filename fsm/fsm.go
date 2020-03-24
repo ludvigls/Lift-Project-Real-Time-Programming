@@ -1,6 +1,7 @@
 package fsm
 
 import (
+	"fmt"
 	"time"
 
 	"../io"
@@ -17,8 +18,6 @@ type State struct {
 	Dir        int
 	Id         int
 }
-
-//const numFloors = 4
 
 type state int
 
@@ -196,14 +195,14 @@ func Fsm(drv_buttons chan io.ButtonEvent, drv_floors chan int, numFloors int, fs
 				}
 			}
 		case a := <-n_fsm_order_chan:
-			//fmt.Println("GOT AN ASSIGNED ORDER")
 			orders[a.Location.Floor*3+int(a.Location.Button)] = true
 			io.SetButtonLamp(a.Location.Button, a.Location.Floor, true)
+			fmt.Println("Sent AN ASSIGNED ORDER")
 		}
 
 		switch curr_state {
 		case 0: //door open
-			if(orderInFloor(curr_floor,orders)){
+			if orderInFloor(curr_floor, orders) {
 				removeOrdersInFloor(curr_floor, orders)
 				Door_timer = time.NewTimer(3 * time.Second)
 			}

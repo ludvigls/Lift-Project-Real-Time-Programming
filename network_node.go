@@ -64,11 +64,9 @@ func getMostRecentMsg(peerUpdateCh chan peers.PeerUpdate, PeerList []string) []s
 	//Atm it does nothing, but things still work...
 	timeOut := false
 	timer := time.NewTimer(200 * time.Millisecond) //emptys the message stack for 100ms
-	//fmt.Println("WAITING")
 	for !timeOut {
 		select {
 		case <-timer.C:
-			//fmt.Println("TIME OUT!!")
 			timeOut = true
 		case a := <-peerUpdateCh:
 			fmt.Println("THIS FUNCTION HAS A PURPOSE :0 !, UPDATING PEERLIST!!") // TODO CODE IS NEVER HERE!!!
@@ -129,7 +127,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	n_od_orderCh := make(chan fsm.Order, 1000)
 	od_n_orderCh := make(chan fsm.Order, 1000)
 	n_fsm_orderCh := make(chan fsm.Order, 1000)
-	globstateCh := make(chan map[int]fsm.State, 1000)
+	globstateCh := make(chan map[string]fsm.State, 1000)
 	fsm_n_stateCh := make(chan fsm.State, 1000)
 
 	//Every node initialized as pure recievers
@@ -186,7 +184,6 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				idInt = initializeID(PeerList)
 
 				//Initialize transmit features for node
-				//fmt.Println("Transmitting with ID: ", idInt)
 				go peers.Transmitter(15647, strconv.Itoa(idInt), peerTxEnable)
 				go bcast.Transmitter(16569, countTx)
 				go bcast.Transmitter(16570, localStateTx)
@@ -197,7 +194,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 
 			if isMaster(PeerList, idInt) {
 				//fmt.Printf("I am primary and count from:  %d \n", count_glob)
-				if !hasBeenMaster { // Should I statrt doing master functionality
+				if !hasBeenMaster {
 					go counter(countCh, count_glob)
 					//go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, globstateCh, numFloors)
 					hasBeenMaster = true
@@ -209,7 +206,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 						fmt.Println("Removing lost lift from globState")
 						delete(globState, p.Lost[i])
 					}
-					globstate_chan <- globState
+					globstateCh <- globState
 					globStateTx <- globState
 				}
 			}
@@ -217,19 +214,15 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 			//NB, master now sends out glob state to port and saves same glob state from port
 			if !isMaster(PeerList, idInt) {
 				globState = a
-				globstate_chan <- globState
-				fmt.Println(globState)
+				globstateCh <- globState
 			}
 		case a := <-unassignedOrderRx:
-			n_od_order_chan <- a
+			n_od_orderCh <- a
 
-		case a := <-fsm_n_state_chan:
-			//fmt.Println("Sending my state now")
-			// globState[a.Id] = a
-			// globstate_chan <- globState
+		case a := <-fsm_n_stateCh:
 			localStateTx <- a
-		case a := <-fsm_n_order_chan:
-			n_od_order_chan <- a //send order to master
+		case a := <-fsm_n_orderCh:
+			n_od_orderCh <- a //send order to master
 			unassignedOrderTx <- a
 		case a := <-countRx:
 			idPeer := a.ID
@@ -237,27 +230,23 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				count_glob = a.Iter // Every nodes backups masters state
 			}
 		case a := <-localStateRx: // recieved local state from any lift
-
 			if isMaster(PeerList, idInt) {
-				globState[strconv.Itoa(a.Id)] = a // update global state
-				globstateCh <- globState     // send out global state on network
+				globState[strconv.Itoa(a.ID)] = a // update global state
+				globstateCh <- globState          // send out global state on network
 				globStateTx <- globState
 			}
 
 		case a := <-countCh: // LOCAL message only heard on local computer
 			count_glob = a
-			//fmt.Printf("Primary counting: %d \n", count_glob) // Counting only happening from master
 
-			//		case a := <-fsm_n_order_chan:
-			//			n_od_order_chan <- a //send order to master
 		case a := <-assignedOrderRx:
-			if a.Id == idInt {
+			if a.ID == idInt {
 				n_fsm_orderCh <- a
 			}
 		case a := <-od_n_orderCh:
 			if isMaster(PeerList, idInt) {
 				assignedOrderTx <- a
-				if a.Id == idInt {
+				if a.ID == idInt {
 					n_fsm_orderCh <- a
 				}
 			}

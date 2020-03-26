@@ -24,9 +24,7 @@ type State struct {
 // Locally sends the state
 func sendState(localstateCh chan State, floor int, dir int, orders []bool, id int) {
 	state := State{orders, floor, dir, id}
-	//fmt.Println("ALMOST SENT STATE")
 	localstateCh <- state
-	//fmt.Println("SENT STATE")
 	return
 }
 
@@ -50,7 +48,6 @@ func removeOrdersInFloor(floor int, orders []bool) { // Remove orders + turn off
 func isOrderInFloor(currFloor int, orders []bool) bool {
 	for b := 0; b <= 2; b++ {
 		if orders[currFloor*3+b] {
-			//removeOrdersInFloor(currFloor, orders)
 			return true
 		}
 	}
@@ -86,8 +83,7 @@ func shouldStopForOrder(currFloor int, currDir io.MotorDirection, numFloors int,
 			return true
 		}
 	}
-	//removeOrdersInFloor(currFloor)
-	return false //maybe wrong
+	return false
 }
 
 func selectArbitraryOrder(currFloor int, numFloors int, orders []bool) io.MotorDirection { //TODO, is this func needed??
@@ -149,7 +145,7 @@ func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_
 	sendState(localstateCh, currFloor, int(currDir), orders, id)
 
 	for {
-		fmt.Println("Current state", currState)
+		//fmt.Println("Current state", currState)
 		select {
 		case <-doorTimer.C: // door is closing
 			io.SetDoorOpenLamp(false)
@@ -160,9 +156,7 @@ func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_
 				currState = 0 // go to door open state
 			} else if hasOrder(orders) {
 				currState = 1 //running
-				fmt.Println(currDir)
 				d = whereToGo(currFloor, currDir, numFloors, orders)
-				fmt.Println(d)
 				currDir = d
 				io.SetMotorDirection(d)
 			} else {
@@ -171,9 +165,6 @@ func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_
 
 		case a := <-drvButtons:
 			fsm_n_orderCh <- Order{a, id}
-			//io.SetButtonLamp(a.Button, a.Floor, true)
-			//orders[(a.Floor)*3+int(a.Button)] = true
-			//fmt.Println(orders)
 
 		case a := <-drvFloors:
 			currFloor = a
@@ -198,7 +189,6 @@ func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_
 		case a := <-n_fsm_orderCh:
 			orders[a.Location.Floor*3+int(a.Location.Button)] = true
 			io.SetButtonLamp(a.Location.Button, a.Location.Floor, true)
-			fmt.Println("Sent AN ASSIGNED ORDER")
 		}
 
 		switch currState {
@@ -207,14 +197,11 @@ func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_
 				removeOrdersInFloor(currFloor, orders)
 				doorTimer = time.NewTimer(3 * time.Second)
 			}
-			///Door_timer = time.NewTimer(3 * time.Second)
 			io.SetDoorOpenLamp(true)
 		case 1: //running
 			//fmt.Printf("running \n")
 		case 2: //idle
 			//fmt.Printf("idle \n")
-			//check for new orders!
-			//d = whereToGo(currDir, currFloor)
 			d = whereToGo(currFloor, currDir, numFloors, orders)
 			io.SetMotorDirection(d)
 

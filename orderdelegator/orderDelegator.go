@@ -3,6 +3,7 @@ package orderdelegator
 import (
 	"fmt"
 	"math"
+	"strconv"
 
 	"../fsm"
 	"../io"
@@ -22,23 +23,22 @@ func cost(order fsm.Order, state fsm.State, numFloors int) int {
 	} else if int(order.Location.Button) == 1 {
 		dir = -1
 	}
-	dirCost := 0
+	dirCost := 1
 	if dir == state.Dir {
-		dirCost = 1
+		dirCost = 0
 	}
 
 	return numOrders + distCost + dirCost
 }
 
 //OrderDelegator is the 'main' function of the orderDelegator module
-func OrderDelegator(n_od_orderCh chan fsm.Order, od_n_orderCh chan fsm.Order, statesCh chan map[int]fsm.State, numFloors int) {
-	states := make(map[int]fsm.State)
+func OrderDelegator(n_od_orderCh chan fsm.Order, od_n_orderCh chan fsm.Order, statesCh chan map[string]fsm.State, numFloors int) {
+	states := make(map[string]fsm.State)
 
 	for {
 		select {
 		case a := <-statesCh:
 			states = a
-			fmt.Println(states)
 
 		case a := <-n_od_orderCh:
 			//fmt.Printf("Order in floor %d", a.Location.Floor) /
@@ -46,7 +46,7 @@ func OrderDelegator(n_od_orderCh chan fsm.Order, od_n_orderCh chan fsm.Order, st
 				fmt.Println("CAB ORDER TAKEN BY MYSELF:", a.ID)
 				od_n_orderCh <- a
 			} else {
-				costs := make(map[int]int)
+				costs := make(map[string]int)
 				for k, v := range states {
 					costs[k] = cost(a, v, numFloors)
 				}
@@ -54,7 +54,7 @@ func OrderDelegator(n_od_orderCh chan fsm.Order, od_n_orderCh chan fsm.Order, st
 				minCost := 1000
 				for id, cost := range costs {
 					if cost < minCost {
-						minID = id
+						minID, _ = strconv.Atoi(id)
 						minCost = cost
 					}
 				}

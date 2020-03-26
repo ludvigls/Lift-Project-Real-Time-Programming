@@ -14,13 +14,13 @@
 
 // 	drv_buttons := make(chan io.ButtonEvent)
 // 	drv_floors := make(chan int)
-// 	order_chan := make(chan fsm.Order)
-// 	globstate_chan := make(chan map[int]fsm.State)
-// 	localstate_chan := make(chan fsm.State)
+// 	orderCh := make(chan fsm.Order)
+// 	globstateCh := make(chan map[int]fsm.State)
+// 	localstateCh := make(chan fsm.State)
 // 	go io.Io(drv_buttons, drv_floors)
 
-// 	go fsm.Fsm(drv_buttons, drv_floors, numFloors, order_chan, localstate_chan, 1)
-// 	go orderDelegator.OrderDelegator(order_chan, globstate_chan, numFloors, numElev)
+// 	go fsm.Fsm(drv_buttons, drv_floors, numFloors, orderCh, localstateCh, 1)
+// 	go orderDelegator.OrderDelegator(orderCh, globstateCh, numFloors, numElev)
 // 	for {
 // 	}
 

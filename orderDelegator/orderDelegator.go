@@ -24,9 +24,9 @@ func cost(order fsm.Order, state fsm.State, numFloors int) int {
 		dir = -1
 	}
 	//TODO, 0 and 1 should be swapped
-	dir_cost := 0
+	dir_cost := 1
 	if dir == state.Dir {
-		dir_cost = 1
+		dir_cost = 0
 	}
 
 	return num_orders + dist_cost + dir_cost

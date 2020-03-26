@@ -198,6 +198,7 @@ func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_
 		case a := <-n_fsm_orderCh:
 			orders[a.Location.Floor*3+int(a.Location.Button)] = true
 			io.SetButtonLamp(a.Location.Button, a.Location.Floor, true)
+			fmt.Println("Sent AN ASSIGNED ORDER")
 		}
 
 		switch currState {

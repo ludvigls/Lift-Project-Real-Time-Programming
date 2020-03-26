@@ -83,7 +83,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	var count_glob int
 	var PeerList []string
 	var hasBeenMaster bool
-	globState := make(map[int]fsm.State)
+	globState := make(map[string]fsm.State)
 	numFloors := 4
 	liftPort := "15657"
 
@@ -110,30 +110,44 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	localStateTx := make(chan fsm.State)
 	localStateRx := make(chan fsm.State)
 
+	globStateTx := make(chan map[string]fsm.State)
+	globStateRx := make(chan map[string]fsm.State)
+
+	unassignedOrderTx := make(chan fsm.Order)
+	unassignedOrderRx := make(chan fsm.Order)
+
+	assignedOrderTx := make(chan fsm.Order)
+	assignedOrderRx := make(chan fsm.Order)
+
 	countCh := make(chan int)
 	idCh := make(chan int)
 
 	// GO ROUTINES EVERYONE WILL RUN v
 	drv_buttons := make(chan io.ButtonEvent)
 	drv_floors := make(chan int)
-	fsm_n_orderCh := make(chan fsm.Order)
-	n_od_orderCh := make(chan fsm.Order)
-	od_n_orderCh := make(chan fsm.Order)
-	n_fsm_orderCh := make(chan fsm.Order)
-	globstateCh := make(chan map[int]fsm.State)
-	globstateChRXTX := make(chan map[int]fsm.State) //make this udp
-	fsm_n_stateCh := make(chan fsm.State)
+	fsm_n_orderCh := make(chan fsm.Order, 1000)
+	n_od_orderCh := make(chan fsm.Order, 1000)
+	od_n_orderCh := make(chan fsm.Order, 1000)
+	n_fsm_orderCh := make(chan fsm.Order, 1000)
+	globstateCh := make(chan map[int]fsm.State, 1000)
+	fsm_n_stateCh := make(chan fsm.State, 1000)
 
 	//Every node initialized as pure recievers
 	go peers.Receiver(15647, peerUpdateCh)
 	go bcast.Receiver(16569, countRx)
 	go bcast.Receiver(16570, localStateRx)
+	go bcast.Receiver(16571, globStateRx)
+	go bcast.Receiver(16572, unassignedOrderRx)
+	go bcast.Receiver(16573, assignedOrderRx)
 
 	if idInt != -1 { //Nodes with IDs are allowed to transmit
 		//fmt.Println("Starting transmitting from ID: ", id)
 		go peers.Transmitter(15647, idStr, peerTxEnable)
 		go bcast.Transmitter(16569, countTx)
 		go bcast.Transmitter(16570, localStateTx)
+		go bcast.Transmitter(16571, globStateTx)
+		go bcast.Transmitter(16572, unassignedOrderTx)
+		go bcast.Transmitter(16573, assignedOrderTx)
 
 		go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_orderCh, n_fsm_orderCh, fsm_n_stateCh, idInt)
 	}
@@ -156,26 +170,8 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 		}
 	}(idCh)
 
-	// TODO : dont be annonomous?? add comments "remove" placeholder functionality
-	go func() {
-		for {
-			select {
-			case a := <-globstateChRXTX:
-				//NB, master now sends out glob state to port and saves same glob state from port
-				globState = a
-			case a := <-fsm_n_stateCh:
-				//fmt.Println("Sending my state now")
-				// globState[a.Id] = a
-				// globstateCh <- globState
-				localStateTx <- a
-			case a := <-fsm_n_orderCh:
-				n_od_orderCh <- a //send order to master
-
-			}
-		}
-	}()
-
 	for {
+
 		select {
 		case p := <-peerUpdateCh:
 			fmt.Printf("Peer update:\n")
@@ -185,18 +181,12 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 
 			PeerList = p.Peers
 
-			//TODO - oppdater globstate når flere heiser blir borte
-
-			// update globState
-
-			//send out globState
-
 			if idInt == -1 {
 				PeerList = getMostRecentMsg(peerUpdateCh, PeerList)
 				idInt = initializeID(PeerList)
 
 				//Initialize transmit features for node
-				fmt.Println("Transmitting with ID: ", idInt)
+				//fmt.Println("Transmitting with ID: ", idInt)
 				go peers.Transmitter(15647, strconv.Itoa(idInt), peerTxEnable)
 				go bcast.Transmitter(16569, countTx)
 				go bcast.Transmitter(16570, localStateTx)
@@ -205,37 +195,69 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				idCh <- idInt
 			}
 
-			// Should I become master?
 			if isMaster(PeerList, idInt) {
 				//fmt.Printf("I am primary and count from:  %d \n", count_glob)
-				if !hasBeenMaster {
+				if !hasBeenMaster { // Should I statrt doing master functionality
 					go counter(countCh, count_glob)
 					//go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, globstateCh, numFloors)
 					hasBeenMaster = true
 				}
+
+				// update globState
+				if len(p.Lost) > 0 {
+					for i := 0; i < len(p.Lost); i++ {
+						fmt.Println("Removing lost lift from globState")
+						delete(globState, p.Lost[i])
+					}
+					globstate_chan <- globState
+					globStateTx <- globState
+				}
 			}
+		case a := <-globStateRx:
+			//NB, master now sends out glob state to port and saves same glob state from port
+			if !isMaster(PeerList, idInt) {
+				globState = a
+				globstate_chan <- globState
+				fmt.Println(globState)
+			}
+		case a := <-unassignedOrderRx:
+			n_od_order_chan <- a
+
+		case a := <-fsm_n_state_chan:
+			//fmt.Println("Sending my state now")
+			// globState[a.Id] = a
+			// globstate_chan <- globState
+			localStateTx <- a
+		case a := <-fsm_n_order_chan:
+			n_od_order_chan <- a //send order to master
+			unassignedOrderTx <- a
 		case a := <-countRx:
 			idPeer := a.ID
 			if isMaster(PeerList, idPeer) {
 				count_glob = a.Iter // Every nodes backups masters state
 			}
 		case a := <-localStateRx: // recieved local state from any lift
+
 			if isMaster(PeerList, idInt) {
-				globState[a.ID] = a          // update global state
+				globState[strconv.Itoa(a.Id)] = a // update global state
 				globstateCh <- globState     // send out global state on network
-				globstateChRXTX <- globState //??
+				globStateTx <- globState
 			}
 
 		case a := <-countCh: // LOCAL message only heard on local computer
 			count_glob = a
 			//fmt.Printf("Primary counting: %d \n", count_glob) // Counting only happening from master
 
-			//		case a := <-fsm_n_orderCh:
-			//			n_od_orderCh <- a //send order to master
-
+			//		case a := <-fsm_n_order_chan:
+			//			n_od_order_chan <- a //send order to master
+		case a := <-assignedOrderRx:
+			if a.Id == idInt {
+				n_fsm_orderCh <- a
+			}
 		case a := <-od_n_orderCh:
 			if isMaster(PeerList, idInt) {
-				if a.ID == idInt {
+				assignedOrderTx <- a
+				if a.Id == idInt {
 					n_fsm_orderCh <- a
 				}
 			}

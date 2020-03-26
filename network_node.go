@@ -127,7 +127,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	n_od_orderCh := make(chan fsm.Order, 1000)
 	od_n_orderCh := make(chan fsm.Order, 1000)
 	n_fsm_orderCh := make(chan fsm.Order, 1000)
-	globstateCh := make(chan map[string]fsm.State, 1000)
+	n_od_globstateCh := make(chan map[string]fsm.State, 1000)
 	fsm_n_stateCh := make(chan fsm.State, 1000)
 
 	//Every node initialized as pure recievers
@@ -151,7 +151,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	}
 
 	go io.Io(drv_buttons, drv_floors)
-	go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, globstateCh, numFloors)
+	go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, n_od_globstateCh, numFloors)
 
 	//Everyone sends out its count msg
 	go func(idCh chan int) {
@@ -196,7 +196,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				//fmt.Printf("I am primary and count from:  %d \n", count_glob)
 				if !hasBeenMaster {
 					go counter(countCh, count_glob)
-					//go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, globstateCh, numFloors)
+					//go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, n_od_globstateCh, numFloors)
 					hasBeenMaster = true
 				}
 
@@ -206,7 +206,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 						fmt.Println("Removing lost lift from globState")
 						delete(globState, p.Lost[i])
 					}
-					globstateCh <- globState
+					n_od_globstateCh <- globState
 					globStateTx <- globState
 				}
 			}
@@ -214,7 +214,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 			//NB, master now sends out glob state to port and saves same glob state from port
 			if !isMaster(PeerList, idInt) {
 				globState = a
-				globstateCh <- globState
+				n_od_globstateCh <- globState
 			}
 		case a := <-unassignedOrderRx:
 			n_od_orderCh <- a
@@ -232,7 +232,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 		case a := <-localStateRx: // recieved local state from any lift
 			if isMaster(PeerList, idInt) {
 				globState[strconv.Itoa(a.ID)] = a // update global state
-				globstateCh <- globState          // send out global state on network
+				n_od_globstateCh <- globState     // send out global state on network
 				globStateTx <- globState
 			}
 

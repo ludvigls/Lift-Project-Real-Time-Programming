@@ -32,12 +32,12 @@ func cost(order fsm.Order, state fsm.State, numFloors int) int {
 }
 
 //OrderDelegator is the 'main' function of the orderDelegator module
-func OrderDelegator(n_od_orderCh chan fsm.Order, od_n_orderCh chan fsm.Order, statesCh chan map[string]fsm.State, numFloors int) {
+func OrderDelegator(n_od_orderCh chan fsm.Order, od_n_orderCh chan fsm.Order, n_od_globstateCh chan map[string]fsm.State, numFloors int) {
 	states := make(map[string]fsm.State)
 
 	for {
 		select {
-		case a := <-statesCh:
+		case a := <-n_od_globstateCh:
 			states = a
 
 		case a := <-n_od_orderCh:

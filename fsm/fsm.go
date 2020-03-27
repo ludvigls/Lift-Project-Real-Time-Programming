@@ -1,7 +1,6 @@
 package fsm
 
 import (
-	"fmt"
 	"time"
 
 	"../io"
@@ -74,7 +73,6 @@ func shouldStopForOrder(currFloor int, currDir io.MotorDirection, numFloors int,
 		}
 		if orders[currFloor*3+int(io.BT_HallUp)] {
 			for f := 0; f < currFloor; f++ {
-				fmt.Printf("floor= %d \n", f)
 				if orders[f*3+int(io.BT_HallDown)] || orders[f*3+int(io.BT_Cab)] || orders[f*3+int(io.BT_HallUp)] { //OR CAB
 
 					return false

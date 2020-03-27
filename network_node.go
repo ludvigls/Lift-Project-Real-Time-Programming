@@ -47,6 +47,8 @@ func isMaster(PeerList []string, ID int) bool {
 
 // initializeID initializes the ID to the id to highest_id+1
 func initializeID(PeerList []string) int {
+	fmt.Println("initializing id")
+	fmt.Println(PeerList)
 	highestID := -1
 	peerID := -1
 	for i := 0; i < len(PeerList); i++ {
@@ -148,10 +150,11 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 		go bcast.Transmitter(16573, assignedOrderTx)
 
 		go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_orderCh, n_fsm_orderCh, fsm_n_stateCh, idInt)
+		go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, n_od_globstateCh, numFloors)
 	}
 
 	go io.Io(drv_buttons, drv_floors)
-	go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, n_od_globstateCh, numFloors)
+	//go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, n_od_globstateCh, numFloors)
 
 	//Everyone sends out its count msg
 	go func(idCh chan int) {
@@ -188,7 +191,10 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				go bcast.Transmitter(16569, countTx)
 				go bcast.Transmitter(16570, localStateTx)
 
+				fmt.Println("MY ID IS: ", idInt)
 				go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_orderCh, n_fsm_orderCh, fsm_n_stateCh, idInt)
+				go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, n_od_globstateCh, numFloors)
+
 				idCh <- idInt
 			}
 

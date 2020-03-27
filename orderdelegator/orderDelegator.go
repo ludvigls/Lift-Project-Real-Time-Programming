@@ -10,6 +10,11 @@ import (
 )
 
 func cost(order fsm.Order, state fsm.State, numFloors int) int {
+
+	if state.ExeOrders[order.Location.Floor*3+int(io.BT_Cab)] || state.ExeOrders[order.Location.Floor*3+int(io.BT_HallUp)] || state.ExeOrders[order.Location.Floor*3+int(io.BT_HallDown)] {
+		fmt.Println("Already have an order on the floor ")
+		return 0
+	}
 	numOrders := 0
 	for i := 0; i < numFloors*3; i++ {
 		if state.ExeOrders[i] {

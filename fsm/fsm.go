@@ -14,9 +14,9 @@ type Order struct {
 
 // State struct containing the state of an individual lift. What direction it has, ID, Floor and its orders
 type State struct {
-	ExeOrders []bool
+	ExeOrders []bool // [up down cab (1)   up down cab (2) ...]
 	Floor     int
-	Dir       int
+	Dir       int //
 	ID        int
 }
 

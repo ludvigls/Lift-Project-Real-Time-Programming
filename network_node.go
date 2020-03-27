@@ -199,19 +199,35 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 			}
 
 			if isMaster(PeerList, idInt) {
-				//fmt.Printf("I am primary and count from:  %d \n", count_glob)
 				if !hasBeenMaster {
 					go counter(countCh, count_glob)
-					//go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, n_od_globstateCh, numFloors)
 					hasBeenMaster = true
 				}
 
 				// update globState
 				if len(p.Lost) > 0 {
 					for i := 0; i < len(p.Lost); i++ {
-						fmt.Println("Removing lost lift from globState")
-						delete(globState, p.Lost[i])
+						fmt.Println("Lost a lift from network")
+
+						fmt.Println("removing all non cab orders + delegate them to other lifts")
+						for f := 0; f < numFloors; f++ {
+
+							if globState[p.Lost[i]].ExeOrders[f*3] {
+								//TODO DELEGATE UP ORDERS
+								//Fsm.Order{Location, -1}
+
+								//n_od_orderCh <-
+								globState[p.Lost[i]].ExeOrders[f*3] = false // remove up orders
+							}
+
+							if globState[p.Lost[i]].ExeOrders[f*3+1] {
+								//TODO DELEGATE DOWN ORDERS
+								globState[p.Lost[i]].ExeOrders[f*3+1] = false
+							}
+						}
+						//delete(globState, p.Lost[i])
 					}
+					fmt.Println(globState)
 					n_od_globstateCh <- globState
 					globStateTx <- globState
 				}

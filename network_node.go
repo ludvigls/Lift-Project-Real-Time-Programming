@@ -211,21 +211,30 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 
 						fmt.Println("removing all non cab orders + delegate them to other lifts")
 						for f := 0; f < numFloors; f++ {
-
-							if globState[p.Lost[i]].ExeOrders[f*3] {
+							if globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] {
 								//TODO DELEGATE UP ORDERS
-								//Fsm.Order{Location, -1}
+								//handle scenario when there is no one on network
 
-								//n_od_orderCh <-
-								globState[p.Lost[i]].ExeOrders[f*3] = false // remove up orders
+								// type ButtonEvent struct {
+								// 	Floor  int
+								// 	Button ButtonType
+								// }
+
+								//n_od_orderCh <- fsm.Order{io.ButtonEvent{f + 1, io.BT_HallUp}, ID_OF_THIS_ORDER} // Id does not matter
+								globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] = false // remove up orders
 							}
 
-							if globState[p.Lost[i]].ExeOrders[f*3+1] {
+							if globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] {
 								//TODO DELEGATE DOWN ORDERS
-								globState[p.Lost[i]].ExeOrders[f*3+1] = false
+
+								//n_od_orderCh <- fsm.Order{io.ButtonEvent{f + 1, io.BT_HallDown}, ID_OF_THIS_ORDER} // Id does not matter
+								globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] = false // remove down order
 							}
 						}
-						//delete(globState, p.Lost[i])
+
+						ghostID := "-" + p.Lost[i]
+						globState[ghostID] = globState[p.Lost[i]]
+						delete(globState, p.Lost[i])
 					}
 					fmt.Println(globState)
 					n_od_globstateCh <- globState

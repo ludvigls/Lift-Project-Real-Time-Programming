@@ -198,14 +198,22 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				idCh <- idInt
 			}
 
+			//Network is lost, all work as individual lifts
+			if len(PeerList) == 0 {
+				// Drepe glob state
+				for i := 0; i < len(p.Lost); i++ {
+					delete(globState, p.Lost[i])
+				}
+			}
+
 			if isMaster(PeerList, idInt) {
 				if !hasBeenMaster {
 					go counter(countCh, count_glob)
 					hasBeenMaster = true
 				}
 
-				// update globState
-				if len(p.Lost) > 0 {
+				// No orders are lost
+				if len(p.Lost) > 0 && len(PeerList) > 0 { // Network is up, but someone is lost
 					for i := 0; i < len(p.Lost); i++ {
 						fmt.Println("Lost a lift from network")
 
@@ -213,33 +221,24 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 						for f := 0; f < numFloors; f++ {
 							if globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] {
 								//TODO DELEGATE UP ORDERS
-								//handle scenario when there is no one on network
-
-								// type ButtonEvent struct {
-								// 	Floor  int
-								// 	Button ButtonType
-								// }
-
-								//n_od_orderCh <- fsm.Order{io.ButtonEvent{f + 1, io.BT_HallUp}, ID_OF_THIS_ORDER} // Id does not matter
-								globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] = false // remove up orders
+								globState[PeerList[0]].ExeOrders[f*3+int(io.BT_HallUp)] = true // redelegates all orders to a random lift
+								globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] = false  // remove up orders
 							}
 
 							if globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] {
 								//TODO DELEGATE DOWN ORDERS
-
-								//n_od_orderCh <- fsm.Order{io.ButtonEvent{f + 1, io.BT_HallDown}, ID_OF_THIS_ORDER} // Id does not matter
+								globState[PeerList[0]].ExeOrders[f*3+int(io.BT_HallDown)] = true
 								globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] = false // remove down order
 							}
 						}
-
 						ghostID := "-" + p.Lost[i]
 						globState[ghostID] = globState[p.Lost[i]]
 						delete(globState, p.Lost[i])
 					}
-					fmt.Println(globState)
 					n_od_globstateCh <- globState
 					globStateTx <- globState
 				}
+				fmt.Println(globState)
 			}
 		case a := <-globStateRx:
 			//NB, master now sends out glob state to port and saves same glob state from port

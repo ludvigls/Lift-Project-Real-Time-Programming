@@ -69,6 +69,7 @@ func getMostRecentMsg(peerUpdateCh chan peers.PeerUpdate, PeerList []string) []s
 	for !timeOut {
 		select {
 		case <-timer.C:
+			fmt.Println("TIME OUT!!")
 			timeOut = true
 		case a := <-peerUpdateCh:
 			fmt.Println("THIS FUNCTION HAS A PURPOSE :0 !, UPDATING PEERLIST!!") // TODO CODE IS NEVER HERE!!!
@@ -83,6 +84,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	//var count_glob int
 	var PeerList []string
 	//var hasBeenMaster bool
+	initialized := false
 	globState := make(map[string]fsm.State)
 	numFloors := 4
 	liftPort := "15657"
@@ -120,7 +122,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	assignedOrderRx := make(chan fsm.Order)
 
 	//countCh := make(chan int)
-	idCh := make(chan int)
+	//idCh := make(chan int)
 
 	// GO ROUTINES EVERYONE WILL RUN v
 	drv_buttons := make(chan io.ButtonEvent)
@@ -181,22 +183,30 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 			fmt.Printf("  Lost:     %q\n", p.Lost)
 
 			PeerList = p.Peers
+			if !initialized {
+				PeerList = getMostRecentMsg(peerUpdateCh, PeerList) // tømme postkassa peerUpdateCh
+				fmt.Printf("PeerList:    %q\n", PeerList)
 
-			if idInt == -1 {
-				PeerList = getMostRecentMsg(peerUpdateCh, PeerList)
-				idInt = initializeID(PeerList)
-
-				//Initialize transmit features for node
-				go peers.Transmitter(15647, strconv.Itoa(idInt), peerTxEnable)
-				//go bcast.Transmitter(16569, countTx)
-				go bcast.Transmitter(16570, localStateTx)
-
-				fmt.Println("MY ID IS: ", idInt)
-				go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_orderCh, n_fsm_orderCh, fsm_n_stateCh, idInt)
-				go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, n_od_globstateCh, numFloors)
-
-				idCh <- idInt
+				initialized = true
 			}
+
+			/*
+				if idInt == -1 {
+					PeerList = getMostRecentMsg(peerUpdateCh, PeerList)
+					idInt = initializeID(PeerList)
+
+					//Initialize transmit features for node
+					go peers.Transmitter(15647, strconv.Itoa(idInt), peerTxEnable)
+					//go bcast.Transmitter(16569, countTx)
+					go bcast.Transmitter(16570, localStateTx)
+
+					fmt.Println("MY ID IS: ", idInt)
+					go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_orderCh, n_fsm_orderCh, fsm_n_stateCh, idInt)
+					go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, n_od_globstateCh, numFloors)
+
+					idCh <- idInt
+				}
+			*/
 
 			//Network is lost, all work as individual lifts
 			if len(PeerList) == 0 {
@@ -204,22 +214,39 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				globState = make(map[string]fsm.State)
 			}
 
+			if isMaster(PeerList, idInt) && len(p.New) > 0 { //There is a new node on network
+				new, _ := strconv.Atoi(p.New)
+				fmt.Println("NEW NODE!")
+				for key, _ := range globState {
+					potentialGhost, _ := strconv.Atoi(key)
+					if potentialGhost == -new {
+						fmt.Println("IM MASTER AND I SHOULD KILLLLLLLLLL THE GHOSTIE!!!!!")
+						//delete(globState, key)
+						//globStateTx <- globState
+					}
+				}
+				//Inform the new node about the global state
+				fmt.Println("Informing a new node about the global state")
+				globStateTx <- globState
+			}
 			// Ensures that no orders are lost
 			if isMaster(PeerList, idInt) && len(p.Lost) > 0 && len(PeerList) > 0 { // Network is up, but someone is lost
 				for i := 0; i < len(p.Lost); i++ {
 					fmt.Println("Lost a lift from network")
 
-					fmt.Println("removing all non cab orders + delegate them to other lifts")
+					fmt.Println("removing all non cab orders + delegate them to master")
 					for f := 0; f < numFloors; f++ {
 						if globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] {
 							//TODO DELEGATE UP ORDERS
-							globState[PeerList[0]].ExeOrders[f*3+int(io.BT_HallUp)] = true // redelegates all orders to a random lift
-							globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] = false  // remove up orders
+							orderID, _ := strconv.Atoi(PeerList[0])
+							n_fsm_orderCh <- fsm.Order{io.ButtonEvent{f, io.BT_HallUp}, orderID}
+							globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] = false // remove up orders
 						}
 
 						if globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] {
 							//TODO DELEGATE DOWN ORDERS
-							globState[PeerList[0]].ExeOrders[f*3+int(io.BT_HallDown)] = true
+							orderID, _ := strconv.Atoi(PeerList[0])
+							n_fsm_orderCh <- fsm.Order{io.ButtonEvent{f, io.BT_HallDown}, orderID}
 							globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] = false // remove down order
 						}
 					}
@@ -235,20 +262,29 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 
 		case a := <-globStateRx:
 			fmt.Println("Recieved globstate")
+
+			// Regain state?
+			for key, _ := range globState {
+				if key == strconv.Itoa(-idInt) {
+					fmt.Printf("Found backup of my state")
+
+					for f := 0; f < numFloors; f++ { // regain backup, take cab orders
+						if globState[key].ExeOrders[f*3+int(io.BT_Cab)] {
+							n_fsm_orderCh <- fsm.Order{io.ButtonEvent{f, io.BT_Cab}, idInt}
+						}
+					}
+					//Should not be done as this node is not master v
+					//delete(globState, strconv.Itoa(-idInt))
+					//globStateTx <- globState
+				}
+			}
+
 			//NB, master now sends out glob state to port and saves same glob state from port
 			if !isMaster(PeerList, idInt) {
 				globState = a
 				n_od_globstateCh <- globState
 			}
 			fmt.Println(globState)
-
-			// Regain state?
-			for key, _ := range globState {
-				if key == strconv.Itoa(-idInt) {
-					fmt.Printf("Found backup")
-
-				}
-			}
 
 		case a := <-unassignedOrderRx:
 			n_od_orderCh <- a

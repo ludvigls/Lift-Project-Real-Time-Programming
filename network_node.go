@@ -22,14 +22,14 @@ type CountMsg struct {
 }
 
 // counter, func for testing network
-func counter(countCh chan<- int, startFrom int) {
-	count := startFrom
-	for {
-		count++
-		countCh <- count
-		time.Sleep(1 * time.Second)
-	}
-}
+// func counter(countCh chan<- int, startFrom int) {
+// 	count := startFrom
+// 	for {
+// 		count++
+// 		countCh <- count
+// 		time.Sleep(1 * time.Second)
+// 	}
+// }
 
 // isMaster returns true if the ID is the smallest on the network (in the PeerList)
 func isMaster(PeerList []string, ID int) bool {
@@ -80,9 +80,9 @@ func getMostRecentMsg(peerUpdateCh chan peers.PeerUpdate, PeerList []string) []s
 
 func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	var idStr string
-	var count_glob int
+	//var count_glob int
 	var PeerList []string
-	var hasBeenMaster bool
+	//var hasBeenMaster bool
 	globState := make(map[string]fsm.State)
 	numFloors := 4
 	liftPort := "15657"
@@ -104,8 +104,8 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	peerTxEnable := make(chan bool) // We can disable/enable the transmitter after it has been started (This could be used to signal that we are somehow "unavailable".)
 
 	// We make channels for sending and receiving our custom data types
-	countTx := make(chan CountMsg)
-	countRx := make(chan CountMsg)
+	// countTx := make(chan CountMsg)
+	// countRx := make(chan CountMsg)
 
 	localStateTx := make(chan fsm.State)
 	localStateRx := make(chan fsm.State)
@@ -119,7 +119,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	assignedOrderTx := make(chan fsm.Order)
 	assignedOrderRx := make(chan fsm.Order)
 
-	countCh := make(chan int)
+	//countCh := make(chan int)
 	idCh := make(chan int)
 
 	// GO ROUTINES EVERYONE WILL RUN v
@@ -134,7 +134,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 
 	//Every node initialized as pure recievers
 	go peers.Receiver(15647, peerUpdateCh)
-	go bcast.Receiver(16569, countRx)
+	//go bcast.Receiver(16569, countRx)
 	go bcast.Receiver(16570, localStateRx)
 	go bcast.Receiver(16571, globStateRx)
 	go bcast.Receiver(16572, unassignedOrderRx)
@@ -143,7 +143,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	if idInt != -1 { //Nodes with IDs are allowed to transmit
 		//fmt.Println("Starting transmitting from ID: ", id)
 		go peers.Transmitter(15647, idStr, peerTxEnable)
-		go bcast.Transmitter(16569, countTx)
+		//go bcast.Transmitter(16569, countTx)
 		go bcast.Transmitter(16570, localStateTx)
 		go bcast.Transmitter(16571, globStateTx)
 		go bcast.Transmitter(16572, unassignedOrderTx)
@@ -157,19 +157,19 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	//go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, n_od_globstateCh, numFloors)
 
 	//Everyone sends out its count msg
-	go func(idCh chan int) {
-		CountMsg := CountMsg{"I'm sending the global state of all lifts", idInt, 0}
-		for {
-			select {
-			case a := <-idCh: //Needed when node is initialized without id
-				CountMsg.ID = a
-			default:
-				CountMsg.Iter = count_glob //Everyone sends the global state in its alive message
-				countTx <- CountMsg
-				time.Sleep(100 * time.Millisecond)
-			}
-		}
-	}(idCh)
+	// go func(idCh chan int) {
+	// 	CountMsg := CountMsg{"I'm sending the global state of all lifts", idInt, 0}
+	// 	for {
+	// 		select {
+	// 		case a := <-idCh: //Needed when node is initialized without id
+	// 			CountMsg.ID = a
+	// 		default:
+	// 			CountMsg.Iter = count_glob //Everyone sends the global state in its alive message
+	// 			countTx <- CountMsg
+	// 			time.Sleep(100 * time.Millisecond)
+	// 		}
+	// 	}
+	// }(idCh)
 
 	for {
 
@@ -188,7 +188,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 
 				//Initialize transmit features for node
 				go peers.Transmitter(15647, strconv.Itoa(idInt), peerTxEnable)
-				go bcast.Transmitter(16569, countTx)
+				//go bcast.Transmitter(16569, countTx)
 				go bcast.Transmitter(16570, localStateTx)
 
 				fmt.Println("MY ID IS: ", idInt)
@@ -200,52 +200,56 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 
 			//Network is lost, all work as individual lifts
 			if len(PeerList) == 0 {
-				// Drepe glob state
+				fmt.Println("Killing the entire glob state")
+				globState = make(map[string]fsm.State)
+			}
+
+			// Ensures that no orders are lost
+			if isMaster(PeerList, idInt) && len(p.Lost) > 0 && len(PeerList) > 0 { // Network is up, but someone is lost
 				for i := 0; i < len(p.Lost); i++ {
+					fmt.Println("Lost a lift from network")
+
+					fmt.Println("removing all non cab orders + delegate them to other lifts")
+					for f := 0; f < numFloors; f++ {
+						if globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] {
+							//TODO DELEGATE UP ORDERS
+							globState[PeerList[0]].ExeOrders[f*3+int(io.BT_HallUp)] = true // redelegates all orders to a random lift
+							globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] = false  // remove up orders
+						}
+
+						if globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] {
+							//TODO DELEGATE DOWN ORDERS
+							globState[PeerList[0]].ExeOrders[f*3+int(io.BT_HallDown)] = true
+							globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] = false // remove down order
+						}
+					}
+					//Create ghost state
+					ghostID := "-" + p.Lost[i]
+					globState[ghostID] = globState[p.Lost[i]]
 					delete(globState, p.Lost[i])
 				}
+				n_od_globstateCh <- globState
+				globStateTx <- globState
 			}
+			fmt.Println(globState)
 
-			if isMaster(PeerList, idInt) {
-				if !hasBeenMaster {
-					go counter(countCh, count_glob)
-					hasBeenMaster = true
-				}
-
-				// No orders are lost
-				if len(p.Lost) > 0 && len(PeerList) > 0 { // Network is up, but someone is lost
-					for i := 0; i < len(p.Lost); i++ {
-						fmt.Println("Lost a lift from network")
-
-						fmt.Println("removing all non cab orders + delegate them to other lifts")
-						for f := 0; f < numFloors; f++ {
-							if globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] {
-								//TODO DELEGATE UP ORDERS
-								globState[PeerList[0]].ExeOrders[f*3+int(io.BT_HallUp)] = true // redelegates all orders to a random lift
-								globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] = false  // remove up orders
-							}
-
-							if globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] {
-								//TODO DELEGATE DOWN ORDERS
-								globState[PeerList[0]].ExeOrders[f*3+int(io.BT_HallDown)] = true
-								globState[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] = false // remove down order
-							}
-						}
-						ghostID := "-" + p.Lost[i]
-						globState[ghostID] = globState[p.Lost[i]]
-						delete(globState, p.Lost[i])
-					}
-					n_od_globstateCh <- globState
-					globStateTx <- globState
-				}
-				fmt.Println(globState)
-			}
 		case a := <-globStateRx:
+			fmt.Println("Recieved globstate")
 			//NB, master now sends out glob state to port and saves same glob state from port
 			if !isMaster(PeerList, idInt) {
 				globState = a
 				n_od_globstateCh <- globState
 			}
+			fmt.Println(globState)
+
+			// Regain state?
+			for key, _ := range globState {
+				if key == strconv.Itoa(-idInt) {
+					fmt.Printf("Found backup")
+
+				}
+			}
+
 		case a := <-unassignedOrderRx:
 			n_od_orderCh <- a
 
@@ -254,20 +258,21 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 		case a := <-fsm_n_orderCh:
 			n_od_orderCh <- a //send order to master
 			unassignedOrderTx <- a
-		case a := <-countRx:
-			idPeer := a.ID
-			if isMaster(PeerList, idPeer) {
-				count_glob = a.Iter // Every nodes backups masters state
-			}
+		//case a := <-countRx:
+		//idPeer := a.ID
+		// if isMaster(PeerList, idPeer) {
+		// 	count_glob = a.Iter // Every nodes backups masters state
+		// }
 		case a := <-localStateRx: // recieved local state from any lift
 			if isMaster(PeerList, idInt) {
+				fmt.Println("UPDATING THE GLOBAL STATE")
 				globState[strconv.Itoa(a.ID)] = a // update global state
 				n_od_globstateCh <- globState     // send out global state on network
 				globStateTx <- globState
 			}
 
-		case a := <-countCh: // LOCAL message only heard on local computer
-			count_glob = a
+		// case a := <-countCh: // LOCAL message only heard on local computer
+		// 	count_glob = a
 
 		case a := <-assignedOrderRx:
 			if a.ID == idInt {

@@ -44,6 +44,11 @@ func removeOrdersInFloor(floor int, orders []bool) { // Remove orders + turn off
 	}
 }
 
+func addOrder(floor int, buttonType io.ButtonType, orders []bool) {
+	orders[floor*3+int(buttonType)] = true
+	io.SetButtonLamp(buttonType, floor, true)
+}
+
 func isOrderInFloor(currFloor int, orders []bool) bool {
 	for b := 0; b <= 2; b++ {
 		if orders[currFloor*3+b] {
@@ -158,8 +163,8 @@ func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_
 				currDir = d
 				io.SetMotorDirection(d)
 			} else {
-				currState = 2
-			} //idle
+				currState = 2 //idle
+			}
 
 		case a := <-drvButtons:
 			fsm_n_orderCh <- Order{a, id}
@@ -174,7 +179,7 @@ func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_
 				io.SetMotorDirection(d)
 				doorTimer = time.NewTimer(3 * time.Second)
 				currState = 0 //door_open
-			} else if a == 0 || a == numFloors-1 { // dont stop for order AND in top/bot floor
+			} else if a == 0 || a == numFloors-1 { // dont stop for order OR in top/bot floor
 				currState = 2 //idle
 			}
 			if a == 0 || a == numFloors-1 { //change dir if you're at top / bottom floor
@@ -185,8 +190,7 @@ func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_
 				}
 			}
 		case a := <-n_fsm_orderCh:
-			orders[a.Location.Floor*3+int(a.Location.Button)] = true
-			io.SetButtonLamp(a.Location.Button, a.Location.Floor, true)
+			addOrder(a.Location.Floor, a.Location.Button, orders)
 		}
 
 		switch currState {

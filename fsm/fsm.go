@@ -137,6 +137,13 @@ func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_
 	orders := make([]bool, numFloors*3)
 
 	//INIT PHASE
+	for f := 0; f < numFloors; f++ { // Turn off all lights
+		io.SetButtonLamp(io.BT_HallUp, f, false)
+		io.SetButtonLamp(io.BT_HallDown, f, false)
+		io.SetButtonLamp(io.BT_Cab, f, false)
+	}
+
+	//Ascends to the floor above
 	var d io.MotorDirection = io.MD_Up
 	currDir := io.MD_Up
 	io.SetMotorDirection(d)
@@ -144,6 +151,8 @@ func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_
 	io.SetFloorIndicator(currFloor)
 	d = io.MD_Stop
 	io.SetMotorDirection(d)
+
+	//Set to idle state
 	currState := 2 //idle
 	sendState(localstateCh, currFloor, int(currDir), orders, id)
 

@@ -53,7 +53,10 @@ func OrderDelegator(n_od_orderCh chan fsm.Order, od_n_orderCh chan fsm.Order, n_
 			} else {
 				costs := make(map[string]int)
 				for k, v := range states {
-					costs[k] = cost(a, v, numFloors)
+					intK, _ := strconv.Atoi(k)
+					if intK > 0 {
+						costs[k] = cost(a, v, numFloors)
+					}
 				}
 				minID := -1
 				minCost := 1000

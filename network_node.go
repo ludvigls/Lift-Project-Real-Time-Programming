@@ -69,10 +69,10 @@ func getMostRecentMsg(peerUpdateCh chan peers.PeerUpdate, PeerList []string) []s
 	for !timeOut {
 		select {
 		case <-timer.C:
-			fmt.Println("TIME OUT!!")
+			//fmt.Println("TIME OUT!!")
 			timeOut = true
 		case a := <-peerUpdateCh:
-			fmt.Println("THIS FUNCTION HAS A PURPOSE :0 !, UPDATING PEERLIST!!") // TODO CODE IS NEVER HERE!!!
+			//fmt.Println("THIS FUNCTION HAS A PURPOSE :0 !, UPDATING PEERLIST!!") // TODO CODE IS NEVER HERE!!!
 			PeerList = a.Peers
 		}
 	}
@@ -144,13 +144,13 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 
 	if idInt != -1 { //Nodes with IDs are allowed to transmit
 		//fmt.Println("Starting transmitting from ID: ", id)
+		// go peers.Transmitter(15647, idStr, peerTxEnable)
+		// //go bcast.Transmitter(16569, countTx)
+		// go bcast.Transmitter(16570, localStateTx)
+		// go bcast.Transmitter(16571, globStateTx)
+		// go bcast.Transmitter(16572, unassignedOrderTx)
+		// go bcast.Transmitter(16573, assignedOrderTx)
 		go peers.Transmitter(15647, idStr, peerTxEnable)
-		//go bcast.Transmitter(16569, countTx)
-		go bcast.Transmitter(16570, localStateTx)
-		go bcast.Transmitter(16571, globStateTx)
-		go bcast.Transmitter(16572, unassignedOrderTx)
-		go bcast.Transmitter(16573, assignedOrderTx)
-
 		go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_orderCh, n_fsm_orderCh, fsm_n_stateCh, idInt)
 		go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, n_od_globstateCh, numFloors)
 	}
@@ -187,6 +187,14 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				PeerList = getMostRecentMsg(peerUpdateCh, PeerList) // tømme postkassa peerUpdateCh
 				fmt.Printf("PeerList:    %q\n", PeerList)
 
+				//go peers.Transmitter(15647, idStr, peerTxEnable)
+				//go bcast.Transmitter(16569, countTx)
+
+				fmt.Println("starting transmision after init")
+				go bcast.Transmitter(16570, localStateTx)
+				go bcast.Transmitter(16571, globStateTx)
+				go bcast.Transmitter(16572, unassignedOrderTx)
+				go bcast.Transmitter(16573, assignedOrderTx)
 				initialized = true
 			}
 
@@ -215,14 +223,23 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 			}
 
 			if isMaster(PeerList, idInt) && len(p.New) > 0 { //There is a new node on network
-				new, _ := strconv.Atoi(p.New)
+				newInt, _ := strconv.Atoi(p.New)
 				fmt.Println("NEW NODE!")
-				for key, _ := range globState {
-					potentialGhost, _ := strconv.Atoi(key)
-					if potentialGhost == -new {
-						fmt.Println("IM MASTER AND I SHOULD KILLLLLLLLLL THE GHOSTIE!!!!!")
-						//delete(globState, key)
-						//globStateTx <- globState
+				for potentialGhost, _ := range globState {
+					potentialGhostInt, _ := strconv.Atoi(potentialGhost)
+					if potentialGhostInt == -newInt {
+						fmt.Println("IM MASTER AND I CAN SEE both lift and ghost version!!!!!!!!")
+
+						fmt.Println("delegating caborders")
+						for f := 0; f < numFloors; f++ {
+							if globState[potentialGhost].ExeOrders[f*3+int(io.BT_Cab)] {
+								assignedOrderTx <- fsm.Order{io.ButtonEvent{f, io.BT_Cab}, newInt}
+							}
+						}
+						fmt.Println("killing ghostie")
+
+						delete(globState, potentialGhost)
+						globStateTx <- globState
 					}
 				}
 				//Inform the new node about the global state
@@ -253,7 +270,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 					//Create ghost state
 					ghostID := "-" + p.Lost[i]
 					globState[ghostID] = globState[p.Lost[i]]
-					delete(globState, p.Lost[i])
+					delete(globState, p.Lost[i]) // delete regular state
 				}
 				n_od_globstateCh <- globState
 				globStateTx <- globState
@@ -263,21 +280,22 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 		case a := <-globStateRx:
 			fmt.Println("Recieved globstate")
 
-			// Regain state?
-			for key, _ := range globState {
-				if key == strconv.Itoa(-idInt) {
-					fmt.Printf("Found backup of my state")
+			// // Regain state?
+			// for key, _ := range globState {
+			// 	if key == strconv.Itoa(-idInt) {
+			// 		fmt.Printf("Found backup of my state")
 
-					for f := 0; f < numFloors; f++ { // regain backup, take cab orders
-						if globState[key].ExeOrders[f*3+int(io.BT_Cab)] {
-							n_fsm_orderCh <- fsm.Order{io.ButtonEvent{f, io.BT_Cab}, idInt}
-						}
-					}
-					//Should not be done as this node is not master v
-					//delete(globState, strconv.Itoa(-idInt))
-					//globStateTx <- globState
-				}
-			}
+			// 		for f := 0; f < numFloors; f++ { // regain backup, take cab orders
+			// 			if globState[key].ExeOrders[f*3+int(io.BT_Cab)] {
+			// 				n_fsm_orderCh <- fsm.Order{io.ButtonEvent{f, io.BT_Cab}, idInt}
+			// 			}
+			// 		}
+			// 		//Should not be done as this node is not master v
+			// 		//fmt.Println("THERE IS A GHOST!!!")
+			// 		// delete(globState, strconv.Itoa(-idInt))
+			// 		// globStateTx <- globState
+			// 	}
+			// }
 
 			//NB, master now sends out glob state to port and saves same glob state from port
 			if !isMaster(PeerList, idInt) {

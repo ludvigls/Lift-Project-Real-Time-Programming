@@ -1,6 +1,7 @@
 package fsm
 
 import (
+	"fmt"
 	"time"
 
 	"../io"
@@ -20,7 +21,7 @@ type State struct {
 	ID        int
 }
 
-// Locally sends the state
+// Sends the state on local go channel
 func sendState(localstateCh chan State, floor int, dir int, orders []bool, id int) {
 	state := State{orders, floor, dir, id}
 	localstateCh <- state
@@ -37,18 +38,21 @@ func hasOrder(orders []bool) bool {
 	return false
 }
 
-func removeOrdersInFloor(floor int, orders []bool) { // Remove orders + turn off lamps
+// Remove orders and turn off lamps
+func removeOrdersInFloor(floor int, orders []bool) {
 	for i := 0; i < 3; i++ { // up, down, cab
 		orders[floor*3+i] = false
 		io.SetButtonLamp(io.ButtonType(i), floor, false)
 	}
 }
 
+// Add orders and turn on lamps
 func addOrder(floor int, buttonType io.ButtonType, orders []bool) {
 	orders[floor*3+int(buttonType)] = true
 	io.SetButtonLamp(buttonType, floor, true)
 }
 
+//Checks whether there is an order in the floor or not
 func isOrderInFloor(currFloor int, orders []bool) bool {
 	for b := 0; b <= 2; b++ {
 		if orders[currFloor*3+b] {
@@ -58,6 +62,7 @@ func isOrderInFloor(currFloor int, orders []bool) bool {
 	return false
 }
 
+//Checks whether the lift should stop for an order or not
 func shouldStopForOrder(currFloor int, currDir io.MotorDirection, numFloors int, orders []bool) bool {
 	if currDir == io.MD_Up {
 		if orders[currFloor*3+int(io.BT_HallUp)] || orders[currFloor*3+int(io.BT_Cab)] { // take orders in curr floor if order goes up / cab order
@@ -106,12 +111,13 @@ func selectArbitraryOrder(currFloor int, numFloors int, orders []bool) io.MotorD
 	return io.MD_Stop
 }
 
+// Outputs a favorable motordirection given its state
 func whereToGo(currFloor int, currDir io.MotorDirection, numFloors int, orders []bool) io.MotorDirection {
 	// Take orders in curr floor
 	if isOrderInFloor(currFloor, orders) {
 		return io.MD_Stop
 	}
-	// if lift is going up and there are orders going up.
+	// Take orders if lift is going up and there are orders going up
 	if currDir == io.MD_Up {
 		for f := currFloor + 1; f < numFloors; f++ { //DONT take the order, if there are other orders in up dir above you / cab orders above
 			if orders[f*3+int(io.BT_HallUp)] || orders[f*3+int(io.BT_Cab)] || orders[f*3+int(io.BT_HallDown)] {
@@ -119,7 +125,7 @@ func whereToGo(currFloor int, currDir io.MotorDirection, numFloors int, orders [
 			}
 		}
 
-		//if lift is going down, and there are orders going down.
+		//Take orders if lift is going down, and there are orders going down
 	} else if currDir == io.MD_Down {
 		for f := 0; f < currFloor; f++ {
 			if orders[f*3+int(io.BT_HallUp)] || orders[f*3+int(io.BT_Cab)] || orders[f*3+int(io.BT_HallDown)] {
@@ -133,11 +139,10 @@ func whereToGo(currFloor int, currDir io.MotorDirection, numFloors int, orders [
 //Fsm is the 'main' function for the fsm module
 func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_n_orderCh chan Order, n_fsm_orderCh chan Order, localstateCh chan State, id int) {
 	doorTimer := time.NewTimer(1200 * time.Second) //init door timer (TODO, the length of this timer is kinda jalla)
-	//var orders [numFloors * 3]bool                 // [. . .   . . .   . . .   . . . ] (3 x 1.etj, 3 x 2.etj ....)
-	orders := make([]bool, numFloors*3)
+	orders := make([]bool, numFloors*3)            // [. . .   . . .   . . .   . . . ] (3 x 1.etj, 3 x 2.etj ....)
 
-	//INIT PHASE
-	for f := 0; f < numFloors; f++ { // Turn off all lights
+	// Turn off all button lights
+	for f := 0; f < numFloors; f++ {
 		io.SetButtonLamp(io.BT_HallUp, f, false)
 		io.SetButtonLamp(io.BT_HallDown, f, false)
 		io.SetButtonLamp(io.BT_Cab, f, false)
@@ -152,12 +157,11 @@ func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_
 	d = io.MD_Stop
 	io.SetMotorDirection(d)
 
-	//Set to idle state
+	//Go to idle state
 	currState := 2 //idle
 	sendState(localstateCh, currFloor, int(currDir), orders, id)
 
 	for {
-		//fmt.Println("Current state", currState)
 		select {
 		case <-doorTimer.C: // door is closing
 			io.SetDoorOpenLamp(false)
@@ -204,15 +208,17 @@ func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_
 
 		switch currState {
 		case 0: //door open
+			fmt.Printf("State: door open \n")
 			if isOrderInFloor(currFloor, orders) {
 				removeOrdersInFloor(currFloor, orders)
 				doorTimer = time.NewTimer(3 * time.Second)
 			}
 			io.SetDoorOpenLamp(true)
 		case 1: //running
-			//fmt.Printf("running \n")
+			fmt.Printf("State: running \n")
+			io.SetDoorOpenLamp(false)
 		case 2: //idle
-			//fmt.Printf("idle \n")
+			fmt.Printf("State: idle \n")
 			d = whereToGo(currFloor, currDir, numFloors, orders)
 			io.SetMotorDirection(d)
 
@@ -225,7 +231,6 @@ func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_
 				currDir = d
 				currState = 1 //running
 			}
-
 		}
 		sendState(localstateCh, currFloor, int(currDir), orders, id)
 	}

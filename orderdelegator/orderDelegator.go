@@ -44,7 +44,7 @@ func OrderDelegator(n_od_orderCh chan fsm.Order, od_n_orderCh chan fsm.Order, n_
 			states = a
 		case a := <-n_od_orderCh: // Only master recieve things from here
 			if a.Location.Button == io.BT_Cab { //cab orders should always be taken at the
-				fmt.Println("Cab order taken by myself:", a.ID)
+				fmt.Println("Delegated cab order to myself:", a.ID)
 				od_n_orderCh <- a
 			} else {
 				costs := make(map[string]int)
@@ -64,12 +64,12 @@ func OrderDelegator(n_od_orderCh chan fsm.Order, od_n_orderCh chan fsm.Order, n_
 				}
 
 				if minID == -1 {
-					fmt.Println("No network connection, will give order to myself")
+					fmt.Println("No network connection, will delegate orders to myself")
 				} else {
 					a.ID = minID //send order to elev with smallest cost
 				}
 
-				fmt.Println("Gave order to id:", a.ID)
+				fmt.Println("Delegated order to id:", a.ID)
 				od_n_orderCh <- a
 			}
 		}

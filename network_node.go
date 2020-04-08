@@ -32,8 +32,8 @@ type CountMsg struct {
 // }
 
 // isMaster returns true if the ID is the smallest on the network (in the PeerList)
-func isMaster(PeerList []string, ID int) bool {
-	if ID == -1 {
+func isMaster(PeerList []string, ID int, masterWaitDone bool) bool {
+	if ID == -1 || !masterWaitDone {
 		return false // Unitialized node cannot be master
 	}
 	for i := 0; i < len(PeerList); i++ {
@@ -172,10 +172,13 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 	// 		}
 	// 	}
 	// }(idCh)
-
+	masterWait := time.NewTimer(200 * time.Millisecond)
+	masterWaitDone := false
 	for {
 
 		select {
+		case <-masterWait.C:
+			masterWaitDone = true
 		case p := <-peerUpdateCh:
 			fmt.Printf("Peer update:\n")
 			fmt.Printf("  Peers:    %q\n", p.Peers)
@@ -195,6 +198,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				go bcast.Transmitter(16571, globStateTx)
 				go bcast.Transmitter(16572, unassignedOrderTx)
 				go bcast.Transmitter(16573, assignedOrderTx)
+
 				initialized = true
 			}
 
@@ -222,9 +226,10 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				globState = make(map[string]fsm.State)
 			}
 
-			if isMaster(PeerList, idInt) && len(p.New) > 0 { //There is a new node on network
+			if isMaster(PeerList, idInt, masterWaitDone) || (len(p.New) > 0 && masterWaitDone) { //There is a new node on network
 				newInt, _ := strconv.Atoi(p.New)
 				fmt.Println("NEW NODE!")
+				fmt.Println(globState)
 				for potentialGhost, _ := range globState {
 					potentialGhostInt, _ := strconv.Atoi(potentialGhost)
 					if potentialGhostInt == -newInt {
@@ -247,7 +252,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				globStateTx <- globState
 			}
 			// Ensures that no orders are lost
-			if isMaster(PeerList, idInt) && len(p.Lost) > 0 && len(PeerList) > 0 { // Network is up, but someone is lost
+			if isMaster(PeerList, idInt, masterWaitDone) && len(p.Lost) > 0 && len(PeerList) > 0 { // Network is up, but someone is lost
 				for i := 0; i < len(p.Lost); i++ {
 					fmt.Println("Lost a lift from network")
 
@@ -298,7 +303,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 			// }
 
 			//NB, master now sends out glob state to port and saves same glob state from port
-			if !isMaster(PeerList, idInt) {
+			if !isMaster(PeerList, idInt, masterWaitDone) {
 				globState = a
 				n_od_globstateCh <- globState
 			}
@@ -318,7 +323,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 		// 	count_glob = a.Iter // Every nodes backups masters state
 		// }
 		case a := <-localStateRx: // recieved local state from any lift
-			if isMaster(PeerList, idInt) {
+			if isMaster(PeerList, idInt, masterWaitDone) {
 				fmt.Println("UPDATING THE GLOBAL STATE")
 				globState[strconv.Itoa(a.ID)] = a // update global state
 				n_od_globstateCh <- globState     // send out global state on network
@@ -333,7 +338,7 @@ func main() { // `go run network_node.go -id=our_id` -liftPort=15657
 				n_fsm_orderCh <- a
 			}
 		case a := <-od_n_orderCh:
-			if isMaster(PeerList, idInt) {
+			if isMaster(PeerList, idInt, masterWaitDone) {
 				assignedOrderTx <- a
 				if a.ID == idInt {
 					n_fsm_orderCh <- a

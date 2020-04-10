@@ -10,10 +10,8 @@ import (
 )
 
 func cost(order fsm.Order, state fsm.State, numFloors int) int {
-
 	if state.ExeOrders[order.Location.Floor*3+int(io.BT_Cab)] || state.ExeOrders[order.Location.Floor*3+int(io.BT_HallUp)] || state.ExeOrders[order.Location.Floor*3+int(io.BT_HallDown)] {
-		fmt.Println("Already have an order on the floor ")
-		return 0
+		return 0 // the cost is 0 for orders on a floor we allready will go to
 	}
 	numOrders := 0
 	for i := 0; i < numFloors*3; i++ {
@@ -44,16 +42,17 @@ func OrderDelegator(n_od_orderCh chan fsm.Order, od_n_orderCh chan fsm.Order, n_
 		select {
 		case a := <-n_od_globstateCh:
 			states = a
-
 		case a := <-n_od_orderCh: // Only master recieve things from here
-			//fmt.Printf("Order in floor %d", a.Location.Floor) /
 			if a.Location.Button == io.BT_Cab { //cab orders should always be taken at the
-				fmt.Println("CAB ORDER TAKEN BY MYSELF:", a.ID)
+				fmt.Println("Delegated cab order to myself:", a.ID)
 				od_n_orderCh <- a
 			} else {
 				costs := make(map[string]int)
 				for k, v := range states {
-					costs[k] = cost(a, v, numFloors)
+					intK, _ := strconv.Atoi(k)
+					if intK > 0 {
+						costs[k] = cost(a, v, numFloors)
+					}
 				}
 				minID := -1
 				minCost := 1000
@@ -65,14 +64,13 @@ func OrderDelegator(n_od_orderCh chan fsm.Order, od_n_orderCh chan fsm.Order, n_
 				}
 
 				if minID == -1 {
-					fmt.Println("No network connection, will give order to myself")
+					fmt.Println("No network connection, will delegate orders to myself")
 				} else {
 					a.ID = minID //send order to elev with smallest cost
 				}
 
-				fmt.Println("GAVE ORDER TO ID:", a.ID)
+				fmt.Println("Delegated order to id:", a.ID)
 				od_n_orderCh <- a
-				//fmt.Printf("\nGive order to id: %d \n", minID)
 			}
 		}
 	}

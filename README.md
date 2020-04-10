@@ -9,6 +9,8 @@ Project description : https://github.com/TTK4145/Project <br/>
 UDP Go Nework driver : https://github.com/TTK4145/Network-go <br/>
 Lift simulator: https://github.com/TTK4145/Simulator-v2 <br/>
 
+The lift simulator and the Go Network module are software we have not created ourself. 
+
 # Implementation
 We will utilize a master slave architecture. The slaves will send their incoming tasks to master, who will distribute them to the most fit elevator. The system will be fault tolerant. For example, each node needs to operate independently in cases where they drop out of the network or when an elevator experiences power loss. The system will also handle the master dropping out by having a backup slave lift taking over the master role when necessary. The end result will be a scalable and robust system, making sensible decisions for an underdetermined amount of elevators.
 

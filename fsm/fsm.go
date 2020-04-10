@@ -7,7 +7,7 @@ import (
 	"../io"
 )
 
-// Order struct containing info on one order. So what type of button, where it was pressed and from which lift it is from.
+// Order struct containing info on one order. Type of button, where it was pressed and from which lift it is from.
 type Order struct {
 	Location io.ButtonEvent //TODO, change name to button
 	ID       int
@@ -94,7 +94,8 @@ func shouldStopForOrder(currFloor int, currDir io.MotorDirection, numFloors int,
 	return false
 }
 
-func selectArbitraryOrder(currFloor int, numFloors int, orders []bool) io.MotorDirection { //TODO, is this func needed??
+//Select the first order it finds
+func selectArbitraryOrder(currFloor int, numFloors int, orders []bool) io.MotorDirection {
 	for f := 0; f < numFloors; f++ {
 		for b := 0; b <= 2; b++ {
 			if orders[f*3+b] {
@@ -169,7 +170,7 @@ func Fsm(drvButtons chan io.ButtonEvent, drvFloors chan int, numFloors int, fsm_
 				removeOrdersInFloor(currFloor, orders)
 				doorTimer = time.NewTimer(3 * time.Second)
 				io.SetDoorOpenLamp(true)
-				currState = 0 // go to door open state
+				currState = 0 //door open
 			} else if hasOrder(orders) {
 				currState = 1 //running
 				d = whereToGo(currFloor, currDir, numFloors, orders)

@@ -9,6 +9,7 @@ import (
 	"../io"
 )
 
+//Calculate the cost of an elevator taking an order
 func cost(order fsm.Order, state fsm.State, numFloors int) int {
 	if state.ExeOrders[order.Location.Floor*3+int(io.BT_Cab)] || state.ExeOrders[order.Location.Floor*3+int(io.BT_HallUp)] || state.ExeOrders[order.Location.Floor*3+int(io.BT_HallDown)] {
 		return 0 // the cost is 0 for orders on a floor we allready will go to

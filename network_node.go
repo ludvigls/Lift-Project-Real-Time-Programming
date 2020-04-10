@@ -8,13 +8,13 @@ import (
 
 	"./fsm"
 	"./io"
-	orderdelegator "./orderdelegator"
+	"./orderdelegator"
 
 	"./network/bcast"
 	"./network/peers"
 )
 
-// copies map
+// Copies map
 func copyMap(mapOriginal map[string]fsm.State) map[string]fsm.State {
 	mapCopy := make(map[string]fsm.State)
 	for k, v := range mapOriginal {
@@ -34,10 +34,10 @@ func isMaster(PeerList []string, ID int) bool {
 	return true
 }
 
-// getMostRecentMsg, listens for messages for a while, gets the most recent message
+// getMostRecentMsg, listens for messages for a while, gets the most recent message, only happens in initialization
 func getMostRecentMsg(peerUpdateCh chan peers.PeerUpdate, PeerList []string) []string {
 	timeOut := false
-	timer := time.NewTimer(200 * time.Millisecond) //emptys the message stack for 100ms
+	timer := time.NewTimer(200 * time.Millisecond) //emptys the message stack for 200ms
 	for !timeOut {
 		select {
 		case <-timer.C:
@@ -49,7 +49,7 @@ func getMostRecentMsg(peerUpdateCh chan peers.PeerUpdate, PeerList []string) []s
 	return PeerList
 }
 
-func main() { // `go run network_node.go -id=1 -liftPort=15657`
+func main() { // go run network_node.go -id=1 -liftPort=15657
 	var idStr string
 	var liftPort string
 	var PeerList []string
@@ -70,7 +70,7 @@ func main() { // `go run network_node.go -id=1 -liftPort=15657`
 	// Channels for sending and receiving our custom data types over UDP
 	localStateTx := make(chan fsm.State)
 	localStateRx := make(chan fsm.State)
-	globStateTx := make(chan map[string]fsm.State)
+	globStateTx := make(chan map[string]fsm.State) //String because network module couldnt handle int
 	globStateRx := make(chan map[string]fsm.State)
 	unassignedOrderTx := make(chan fsm.Order)
 	unassignedOrderRx := make(chan fsm.Order)

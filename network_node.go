@@ -14,7 +14,7 @@ import (
 	"./network/peers"
 )
 
-// Copies map
+// Returns a copy of the globalstate map
 func copyMap(mapOriginal map[string]fsm.State) map[string]fsm.State {
 	mapCopy := make(map[string]fsm.State)
 	for k, v := range mapOriginal {
@@ -23,7 +23,7 @@ func copyMap(mapOriginal map[string]fsm.State) map[string]fsm.State {
 	return mapCopy
 }
 
-// isMaster returns true if the ID is the smallest on the network (in the PeerList)
+// Checks if a lift is master, returns true if the ID is the smallest on the network (in the PeerList)
 func isMaster(PeerList []string, ID int) bool {
 	for i := 0; i < len(PeerList); i++ {
 		peerID, _ := strconv.Atoi(PeerList[i])
@@ -34,7 +34,7 @@ func isMaster(PeerList []string, ID int) bool {
 	return true
 }
 
-// getMostRecentMsg, listens for messages for a while, gets the most recent message, only happens in initialization
+// Listens for messages on peerUpdateCh for a while, returns the most recent message
 func getMostRecentMsg(peerUpdateCh chan peers.PeerUpdate, PeerList []string) []string {
 	timeOut := false
 	timer := time.NewTimer(200 * time.Millisecond) //emptys the message stack for 200ms
@@ -49,45 +49,46 @@ func getMostRecentMsg(peerUpdateCh chan peers.PeerUpdate, PeerList []string) []s
 	return PeerList
 }
 
-func handleCabOrders(New string, globState map[string]fsm.State, assignedOrderTx chan fsm.Order, numFloors int) map[string]fsm.State {
+func handleNewLift(New string, globState map[string]fsm.State, assignedOrderTx chan fsm.Order, numFloors int) map[string]fsm.State {
 	newInt, _ := strconv.Atoi(New)
 	globStateCopy := copyMap(globState)
 	for potentialGhost, _ := range globStateCopy {
 		potentialGhostInt, _ := strconv.Atoi(potentialGhost)
 		if potentialGhostInt == -newInt {
-
 			fmt.Println("Delegating caborders to recovered lift")
 			for f := 0; f < numFloors; f++ {
 				if globStateCopy[potentialGhost].ExeOrders[f*3+int(io.BT_Cab)] {
-					assignedOrderTx <- fsm.Order{io.ButtonEvent{f, io.BT_Cab}, newInt}
+					assignedOrderTx <- fsm.Order{io.ButtonEvent{f, io.BT_Cab}, newInt} // Delegate cab orders to recovered lift
 				}
 			}
-			delete(globStateCopy, potentialGhost)
+			delete(globStateCopy, potentialGhost) // Delete backup
 		}
 	}
 	return globStateCopy
 }
 
-func handleNonCabOrders(n_fsm_orderCh chan fsm.Order, PeerList []string, lost []string, globState map[string]fsm.State, numFloors int) map[string]fsm.State {
+func handleLostLift(n_fsm_orderCh chan fsm.Order, PeerList []string, lost []string, globState map[string]fsm.State, numFloors int) map[string]fsm.State {
 	globStateCopy := copyMap(globState)
 	for i := 0; i < len(lost); i++ {
-		fmt.Println("Lost a lift from network, will redelegate its non cab orders")
+		fmt.Println("Lost a lift from network, will redelegate its hall orders")
 		for f := 0; f < numFloors; f++ {
+			//Redelegate hallUp orders
 			if globStateCopy[lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] {
 				orderID, _ := strconv.Atoi(PeerList[0])
 				n_fsm_orderCh <- fsm.Order{io.ButtonEvent{f, io.BT_HallUp}, orderID}
-				globStateCopy[lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] = false // remove up orders
+				globStateCopy[lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] = false // Remove hallUp orders
 			}
+			// Redelegate hallDown orders
 			if globStateCopy[lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] {
 				orderID, _ := strconv.Atoi(PeerList[0])
 				n_fsm_orderCh <- fsm.Order{io.ButtonEvent{f, io.BT_HallDown}, orderID}
-				globStateCopy[lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] = false // remove down order
+				globStateCopy[lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] = false // Remove hallDown order
 			}
 		}
 		//Create backup state
 		ghostID := "-" + lost[i]
 		globStateCopy[ghostID] = globStateCopy[lost[i]]
-		delete(globStateCopy, lost[i]) // delete regular state
+		delete(globStateCopy, lost[i]) // Delete regular state
 	}
 	return globStateCopy
 }
@@ -107,12 +108,12 @@ func main() { // go run network_node.go -id=1 -liftPort=15657
 
 	// Channel for receiving updates on the id's of the peers that are alive on network
 	peerUpdateCh := make(chan peers.PeerUpdate)
-	peerTxEnable := make(chan bool) // We can disable/enable the transmitter after it has been started (This could be used to signal that we are somehow "unavailable".)
+	peerTxEnable := make(chan bool)
 
 	// Channels for sending and receiving our custom data types over UDP
 	localStateTx := make(chan fsm.State)
 	localStateRx := make(chan fsm.State)
-	globStateTx := make(chan map[string]fsm.State) //String because network module couldnt handle int
+	globStateTx := make(chan map[string]fsm.State) //map[string] because network module couldnt handle map[int]
 	globStateRx := make(chan map[string]fsm.State)
 	unassignedOrderTx := make(chan fsm.Order)
 	unassignedOrderRx := make(chan fsm.Order)
@@ -134,21 +135,21 @@ func main() { // go run network_node.go -id=1 -liftPort=15657
 	go bcast.Transmitter(16573, assignedOrderTx)
 
 	// Regular Go channels
-	// Channels between Network and IO modules
+	// Channels sending from Network to IO
 	drv_buttons := make(chan io.ButtonEvent)
 	drv_floors := make(chan int)
 
-	//Channels between network and orderDelegator modules
+	//Channels between network and orderDelegator (name convention: from_to_typeCh)
 	fsm_n_orderCh := make(chan fsm.Order, 1000)
 	fsm_n_stateCh := make(chan fsm.State, 1000)
 	n_fsm_orderCh := make(chan fsm.Order, 1000)
 
-	//Channels between network and orderDelegator modules
+	//Channels between network and orderDelegator (name convention: from_to_typeCh)
 	od_n_orderCh := make(chan fsm.Order, 1000)
 	n_od_orderCh := make(chan fsm.Order, 1000)
 	n_od_globstateCh := make(chan map[string]fsm.State, 1000)
 
-	// Running the modules : fsm, orderDel and IO
+	// Running the modules Fsm, OrderDelegator and IO
 	io.Init("localhost:"+liftPort, numFloors)
 	go fsm.Fsm(drv_buttons, drv_floors, numFloors, fsm_n_orderCh, n_fsm_orderCh, fsm_n_stateCh, idInt)
 	go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, n_od_globstateCh, numFloors)
@@ -163,37 +164,36 @@ func main() { // go run network_node.go -id=1 -liftPort=15657
 			fmt.Printf("  Lost:     %q\n", p.Lost)
 
 			if !initialized {
-				PeerList = getMostRecentMsg(peerUpdateCh, PeerList) // tømme postkassa peerUpdateCh
+				PeerList = getMostRecentMsg(peerUpdateCh, PeerList) // "tømme postkassa" for peerUpdateCh
 				initialized = true
 			}
+
 			fmt.Printf("  Peers:    %q\n", PeerList)
 
-			//Network is lost, all work as individual lifts
+			//Network is lost, all lifts works as individual lifts
 			if len(PeerList) == 0 {
 				fmt.Println("Network connection lost, removed global state")
 				globStateCopy := make(map[string]fsm.State)
 				n_od_globstateCh <- globStateCopy
 			}
 
-			if isMaster(PeerList, idInt) || len(p.New) > 0 { //There is a new node on network
+			if isMaster(PeerList, idInt) {
+				globStateTx <- copyMap(globState) // publishes globalstate over UDP
+			}
 
-				globStateCopy := handleCabOrders(p.New, globState, assignedOrderTx, numFloors)
-				//Inform the new node about the global state
-				fmt.Println("Informing a new node about the global state")
+			if len(p.New) > 0 {
+				globStateCopy := handleNewLift(p.New, globState, assignedOrderTx, numFloors)
 				globStateTx <- globStateCopy
 			}
 
-			// Ensures that no orders are lost
 			if isMaster(PeerList, idInt) && len(p.Lost) > 0 && len(PeerList) > 0 { // Network is up, but someone is lost
-				globStateCopy := handleNonCabOrders(n_fsm_orderCh, PeerList, p.Lost, globState, numFloors)
+				globStateCopy := handleLostLift(n_fsm_orderCh, PeerList, p.Lost, globState, numFloors)
 				n_od_globstateCh <- globStateCopy
 				globStateTx <- globStateCopy
 			}
 		case a := <-globStateRx:
 			globState = a
-			//fmt.Println(globState)
 			if !isMaster(PeerList, idInt) {
-				globState = a
 				n_od_globstateCh <- copyMap(globState)
 			}
 		case a := <-unassignedOrderRx:
@@ -201,7 +201,7 @@ func main() { // go run network_node.go -id=1 -liftPort=15657
 		case a := <-fsm_n_stateCh:
 			localStateTx <- a
 		case a := <-fsm_n_orderCh:
-			n_od_orderCh <- a //send order to master
+			n_od_orderCh <- a
 			unassignedOrderTx <- a
 		case a := <-localStateRx: // recieved local state from any lift
 			globStateCopy := copyMap(globState)

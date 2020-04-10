@@ -4,9 +4,9 @@ Project in the course Real-time Programming (https://www.ntnu.edu/studies/course
 # Project description
 The purpose of this project was creating software for controlling n elevators working in parallel across m floors. The software was run both on a physical model lift and in a lift simulator. We chose to program in Go as we saw it fit for the task and wanted to become familiar with a new programming language. This is our first project with network communication and multithreading. 
 
-Course github page : https://github.com/TTK4145/Project <br/>
+Course github page : https://github.com/TTK4145 <br/>
 Project description : https://github.com/TTK4145/Project <br/>
-UDP go Nework driver : https://github.com/TTK4145/Network-go <br/>
+UDP Go Nework driver : https://github.com/TTK4145/Network-go <br/>
 Lift simulator: https://github.com/TTK4145/Simulator-v2 <br/>
 
 # Implementation

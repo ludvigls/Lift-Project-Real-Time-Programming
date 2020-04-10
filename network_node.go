@@ -24,10 +24,7 @@ func copyMap(mapOriginal map[string]fsm.State) map[string]fsm.State {
 }
 
 // isMaster returns true if the ID is the smallest on the network (in the PeerList)
-func isMaster(PeerList []string, ID int, masterWaitDone bool) bool {
-	if !masterWaitDone {
-		return false // ??
-	}
+func isMaster(PeerList []string, ID int) bool {
 	for i := 0; i < len(PeerList); i++ {
 		peerID, _ := strconv.Atoi(PeerList[i])
 		if peerID < ID {
@@ -115,13 +112,8 @@ func main() { // `go run network_node.go -id=1 -liftPort=15657`
 	go orderdelegator.OrderDelegator(n_od_orderCh, od_n_orderCh, n_od_globstateCh, numFloors)
 	go io.Io(drv_buttons, drv_floors)
 
-	// Backup takes over master functionality after 200ms
-	masterWait := time.NewTimer(200 * time.Millisecond)
-	masterWaitDone := false
 	for {
 		select {
-		case <-masterWait.C:
-			masterWaitDone = true
 		case p := <-peerUpdateCh:
 			PeerList = p.Peers
 			fmt.Printf("Peer update:\n")
@@ -141,7 +133,7 @@ func main() { // `go run network_node.go -id=1 -liftPort=15657`
 				n_od_globstateCh <- globStateCopy
 			}
 
-			if isMaster(PeerList, idInt, masterWaitDone) || (len(p.New) > 0 && masterWaitDone) { //There is a new node on network
+			if isMaster(PeerList, idInt) || len(p.New) > 0 { //There is a new node on network
 				newInt, _ := strconv.Atoi(p.New)
 				globStateCopy := copyMap(globState)
 				for potentialGhost, _ := range globStateCopy {
@@ -164,7 +156,7 @@ func main() { // `go run network_node.go -id=1 -liftPort=15657`
 			}
 
 			// Ensures that no orders are lost
-			if isMaster(PeerList, idInt, masterWaitDone) && len(p.Lost) > 0 && len(PeerList) > 0 { // Network is up, but someone is lost
+			if isMaster(PeerList, idInt) && len(p.Lost) > 0 && len(PeerList) > 0 { // Network is up, but someone is lost
 				globStateCopy := copyMap(globState)
 				for i := 0; i < len(p.Lost); i++ {
 					fmt.Println("Lost a lift from network, will redelegate its non cab orders")
@@ -191,7 +183,7 @@ func main() { // `go run network_node.go -id=1 -liftPort=15657`
 		case a := <-globStateRx:
 			globState = a
 			//fmt.Println(globState)
-			if !isMaster(PeerList, idInt, masterWaitDone) {
+			if !isMaster(PeerList, idInt) {
 				globState = a
 				n_od_globstateCh <- copyMap(globState)
 			}
@@ -204,7 +196,7 @@ func main() { // `go run network_node.go -id=1 -liftPort=15657`
 			unassignedOrderTx <- a
 		case a := <-localStateRx: // recieved local state from any lift
 			globStateCopy := copyMap(globState)
-			if isMaster(PeerList, idInt, masterWaitDone) {
+			if isMaster(PeerList, idInt) {
 				globStateCopy[strconv.Itoa(a.ID)] = a // update global state
 				n_od_globstateCh <- globStateCopy     // send out global state on network
 				globStateTx <- globStateCopy
@@ -214,7 +206,7 @@ func main() { // `go run network_node.go -id=1 -liftPort=15657`
 				n_fsm_orderCh <- a
 			}
 		case a := <-od_n_orderCh:
-			if isMaster(PeerList, idInt, masterWaitDone) {
+			if isMaster(PeerList, idInt) {
 				assignedOrderTx <- a
 				if a.ID == idInt {
 					n_fsm_orderCh <- a

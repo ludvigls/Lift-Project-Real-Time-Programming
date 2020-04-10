@@ -49,6 +49,48 @@ func getMostRecentMsg(peerUpdateCh chan peers.PeerUpdate, PeerList []string) []s
 	return PeerList
 }
 
+func handleCabOrders(New string, globState map[string]fsm.State, assignedOrderTx chan fsm.Order, numFloors int) map[string]fsm.State {
+	newInt, _ := strconv.Atoi(New)
+	globStateCopy := copyMap(globState)
+	for potentialGhost, _ := range globStateCopy {
+		potentialGhostInt, _ := strconv.Atoi(potentialGhost)
+		if potentialGhostInt == -newInt {
+
+			fmt.Println("Delegating caborders to recovered lift")
+			for f := 0; f < numFloors; f++ {
+				if globStateCopy[potentialGhost].ExeOrders[f*3+int(io.BT_Cab)] {
+					assignedOrderTx <- fsm.Order{io.ButtonEvent{f, io.BT_Cab}, newInt}
+				}
+			}
+			delete(globStateCopy, potentialGhost)
+		}
+	}
+	return globStateCopy
+}
+
+func handleNonCabOrders(n_fsm_orderCh chan fsm.Order, PeerList []string, lost []string, globState map[string]fsm.State, numFloors int) map[string]fsm.State {
+	globStateCopy := copyMap(globState)
+	for i := 0; i < len(lost); i++ {
+		fmt.Println("Lost a lift from network, will redelegate its non cab orders")
+		for f := 0; f < numFloors; f++ {
+			if globStateCopy[lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] {
+				orderID, _ := strconv.Atoi(PeerList[0])
+				n_fsm_orderCh <- fsm.Order{io.ButtonEvent{f, io.BT_HallUp}, orderID}
+				globStateCopy[lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] = false // remove up orders
+			}
+			if globStateCopy[lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] {
+				orderID, _ := strconv.Atoi(PeerList[0])
+				n_fsm_orderCh <- fsm.Order{io.ButtonEvent{f, io.BT_HallDown}, orderID}
+				globStateCopy[lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] = false // remove down order
+			}
+		}
+		//Create backup state
+		ghostID := "-" + lost[i]
+		globStateCopy[ghostID] = globStateCopy[lost[i]]
+		delete(globStateCopy, lost[i]) // delete regular state
+	}
+	return globStateCopy
+}
 func main() { // go run network_node.go -id=1 -liftPort=15657
 	var idStr string
 	var liftPort string
@@ -134,22 +176,8 @@ func main() { // go run network_node.go -id=1 -liftPort=15657
 			}
 
 			if isMaster(PeerList, idInt) || len(p.New) > 0 { //There is a new node on network
-				newInt, _ := strconv.Atoi(p.New)
-				globStateCopy := copyMap(globState)
-				for potentialGhost, _ := range globStateCopy {
-					potentialGhostInt, _ := strconv.Atoi(potentialGhost)
-					if potentialGhostInt == -newInt {
 
-						fmt.Println("Delegating caborders to recovered lift")
-						for f := 0; f < numFloors; f++ {
-							if globStateCopy[potentialGhost].ExeOrders[f*3+int(io.BT_Cab)] {
-								assignedOrderTx <- fsm.Order{io.ButtonEvent{f, io.BT_Cab}, newInt}
-							}
-						}
-						delete(globStateCopy, potentialGhost)
-						globStateTx <- globStateCopy
-					}
-				}
+				globStateCopy := handleCabOrders(p.New, globState, assignedOrderTx, numFloors)
 				//Inform the new node about the global state
 				fmt.Println("Informing a new node about the global state")
 				globStateTx <- globStateCopy
@@ -157,26 +185,7 @@ func main() { // go run network_node.go -id=1 -liftPort=15657
 
 			// Ensures that no orders are lost
 			if isMaster(PeerList, idInt) && len(p.Lost) > 0 && len(PeerList) > 0 { // Network is up, but someone is lost
-				globStateCopy := copyMap(globState)
-				for i := 0; i < len(p.Lost); i++ {
-					fmt.Println("Lost a lift from network, will redelegate its non cab orders")
-					for f := 0; f < numFloors; f++ {
-						if globStateCopy[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] {
-							orderID, _ := strconv.Atoi(PeerList[0])
-							n_fsm_orderCh <- fsm.Order{io.ButtonEvent{f, io.BT_HallUp}, orderID}
-							globStateCopy[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallUp)] = false // remove up orders
-						}
-						if globStateCopy[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] {
-							orderID, _ := strconv.Atoi(PeerList[0])
-							n_fsm_orderCh <- fsm.Order{io.ButtonEvent{f, io.BT_HallDown}, orderID}
-							globStateCopy[p.Lost[i]].ExeOrders[f*3+int(io.BT_HallDown)] = false // remove down order
-						}
-					}
-					//Create backup state
-					ghostID := "-" + p.Lost[i]
-					globStateCopy[ghostID] = globStateCopy[p.Lost[i]]
-					delete(globStateCopy, p.Lost[i]) // delete regular state
-				}
+				globStateCopy := handleNonCabOrders(n_fsm_orderCh, PeerList, p.Lost, globState, numFloors)
 				n_od_globstateCh <- globStateCopy
 				globStateTx <- globStateCopy
 			}

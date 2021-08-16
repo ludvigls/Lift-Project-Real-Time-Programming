@@ -1,5 +1,5 @@
 # Lift project in Go - Real-time Programming (TTK4145)
-Project in the course Real-time Programming (https://www.ntnu.edu/studies/courses/TTK4145#tab=omEmnet)
+Project in the course Real-time Programming (https://www.ntnu.edu/studies/courses/TTK4145#tab=omEmnet). UML diagrams were also created, see "Design Hangout.pdf". 
 
 # Project description
 The purpose of this project was creating software for controlling n elevators working in parallel across m floors. The software was run both on a physical model lift and in a lift simulator. We chose to program in Go as we saw it fit for the task and wanted to become familiar with a new programming language. This is our first project with network communication and multithreading. Faults are handled but it is assumed that no faults will happen simultaneously. With these assumptions the lift system does not aim to be optimal but ensures that no orders are lost. A closer description of the project is given at https://github.com/TTK4145/Project. 
